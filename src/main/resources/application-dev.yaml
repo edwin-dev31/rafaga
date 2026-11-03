@@ -6,8 +6,8 @@ spring:
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: RafagaSharedPool
-      maximum-pool-size: 10
-      minimum-idle: 2
+      maximum-pool-size: 50
+      minimum-idle: 10
       connection-timeout: 30000
   flyway:
     enabled: true
