@@ -1,0 +1,7 @@
+description = 'Identity and access module.'
+
+dependencies {
+	implementation project(':modules:common')
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+}

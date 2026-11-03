@@ -1,1 +1,8 @@
-rootProject.name = 'backend'
+rootProject.name = 'rafaga-backend'
+
+include 'modules:common'
+include 'modules:identity'
+include 'modules:tenant'
+include 'modules:catalog'
+include 'modules:inventory'
+include 'modules:orders'

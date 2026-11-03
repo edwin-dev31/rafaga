@@ -1,0 +1,7 @@
+description = 'Product catalog module.'
+
+dependencies {
+	implementation project(':modules:common')
+	implementation project(':modules:tenant')
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+}
