@@ -37,6 +37,7 @@ dependencies {
 	implementation project(':modules:orders')
 
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
@@ -84,15 +85,19 @@ subprojects {
 
 		testImplementation 'org.springframework.boot:spring-boot-starter-test'
 		testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 		testCompileOnly 'org.projectlombok:lombok'
 		testAnnotationProcessor 'org.projectlombok:lombok'
 	}
 
 	tasks.named('test') {
 		useJUnitPlatform()
+		systemProperty 'spring.profiles.active', System.getProperty('spring.profiles.active', 'test')
+		systemProperty 'spring.config.additional-location', rootProject.file('src/test/resources/').toURI().toString()
 	}
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+	systemProperty 'spring.profiles.active', System.getProperty('spring.profiles.active', 'test')
 }

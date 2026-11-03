@@ -13,6 +13,10 @@ spring:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
+  cache:
+    type: redis
+    redis:
+      time-to-live: 5m
   jpa:
     hibernate:
       ddl-auto: validate

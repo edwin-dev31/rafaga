@@ -1,12 +1,13 @@
 package com.rafaga.backend.tenant.domain.model;
 
+import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
 public record TenantConfig(String tenantId, String name, List<String> domains,
                            DeploymentMode deploymentMode, DatabaseConfig databaseConfig,
-                           String planId, TenantStatus status, Map<String, Boolean> featureFlags) {
+                           String planId, TenantStatus status, Map<String, Boolean> featureFlags) implements Serializable {
     public TenantConfig {
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(name, "name must not be null");

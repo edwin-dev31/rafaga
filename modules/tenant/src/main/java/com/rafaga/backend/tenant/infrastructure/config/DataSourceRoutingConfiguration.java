@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 
 @Configuration(proxyBeanMethods = false)
@@ -17,7 +18,7 @@ public class DataSourceRoutingConfiguration {
     @Bean(destroyMethod = "close")
     @Primary
     TenantAwareRoutingDataSource tenantAwareRoutingDataSource(
-            TenantRegistry tenantRegistry,
+            @Lazy TenantRegistry tenantRegistry,
             TenantDatabaseCredentialsProvider credentialsProvider,
             SharedDataSourceProperties sharedProperties) {
         HikariDataSource sharedDataSource = sharedProperties.createDataSource();

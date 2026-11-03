@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: ${TEST_DB_SHARED_URL:jdbc:postgresql://localhost:5433/rafaga_test}
+    username: ${TEST_DB_SHARED_USER:rafaga_test}
+    password: ${TEST_DB_SHARED_PASSWORD:rafaga_test}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: RafagaTestPool
+      maximum-pool-size: 10
+      minimum-idle: 1
+      connection-timeout: 30000
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  cache:
+    type: redis
+    redis:
+      time-to-live: 5m
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6380}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
