@@ -22,26 +22,51 @@ public class TenantContextFilter extends OncePerRequestFilter {
     private final CompositeTenantResolver tenantResolver;
     private final ObjectProvider<TenantRegistry> registryProvider;
 
-    public TenantContextFilter(CompositeTenantResolver tenantResolver, ObjectProvider<TenantRegistry> registryProvider) {
+    public TenantContextFilter(
+            CompositeTenantResolver tenantResolver,
+            ObjectProvider<TenantRegistry> registryProvider) {
         this.tenantResolver = tenantResolver;
         this.registryProvider = registryProvider;
     }
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.equals("/actuator/health") || path.startsWith("/api/public/") || path.startsWith("/api/admin/");
+        return path.equals("/actuator/health")
+                || path.startsWith("/api/public/")
+                || path.startsWith("/api/admin/");
     }
+
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain chain)
             throws ServletException, IOException {
         String tenantId = tenantResolver.resolve(request).orElse(null);
-        if (tenantId == null) { response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unable to determine tenant for request"); return; }
+        if (tenantId == null) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unable to determine tenant for request");
+            return;
+        }
         TenantRegistry registry = registryProvider.getIfAvailable();
-        if (registry == null) { response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Tenant registry is unavailable"); return; }
+        if (registry == null) {
+            response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Tenant registry is unavailable");
+            return;
+        }
         TenantConfig tenant = registry.findById(tenantId).orElse(null);
-        if (tenant == null) { response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Resolved tenant is not registered"); return; }
-        if (tenant.status() != TenantStatus.ACTIVE) { response.sendError(HttpServletResponse.SC_FORBIDDEN, "Tenant is inactive"); return; }
-        try { TenantContext.setCurrentTenantId(tenantId); chain.doFilter(request, response); }
-        finally { TenantContext.clear(); }
+        if (tenant == null) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Resolved tenant is not registered");
+            return;
+        }
+        if (tenant.status() != TenantStatus.ACTIVE) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Tenant is inactive");
+            return;
+        }
+        try {
+            TenantContext.setCurrentTenantId(tenantId);
+            chain.doFilter(request, response);
+        } finally {
+            TenantContext.clear();
+        }
     }
 }

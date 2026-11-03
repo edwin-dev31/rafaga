@@ -1,4 +1,4 @@
-package com.rafaga.backend.tenant.application.tenant;
+package com.rafaga.backend.tenant.application.resolution;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Optional;
