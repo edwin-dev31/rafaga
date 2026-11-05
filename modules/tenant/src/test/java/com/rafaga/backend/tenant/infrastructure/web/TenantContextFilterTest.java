@@ -50,4 +50,12 @@ class TenantContextFilterTest {
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(TenantContext.isSet()).isFalse();
     }
+
+    @Test
+    void resolvesTenantContextForPublicAuthenticationEndpoints() {
+        TenantContextFilter filter = new TenantContextFilter(mock(CompositeTenantResolver.class), mock(ObjectProvider.class));
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/public/auth/login");
+
+        assertThat(filter.shouldNotFilter(request)).isFalse();
+    }
 }

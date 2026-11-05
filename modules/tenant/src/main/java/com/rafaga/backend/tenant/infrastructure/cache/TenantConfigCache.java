@@ -17,11 +17,11 @@ public class TenantConfigCache {
         this.store = store;
     }
 
-    @Cacheable(cacheNames = TENANTS_CACHE, key = "#tenantId")
+    @Cacheable(cacheNames = TENANTS_CACHE, key = "#p0")
     public Optional<TenantConfig> get(String tenantId) {
         return store.findById(tenantId);
     }
 
-    @CacheEvict(cacheNames = TENANTS_CACHE, key = "#tenantId")
+    @CacheEvict(cacheNames = TENANTS_CACHE, key = "#p0")
     public void invalidate(String tenantId) {}
 }
