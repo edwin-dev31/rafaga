@@ -1,0 +1,98 @@
+{
+  "realm": "rafaga",
+  "displayName": "Rafaga Development",
+  "enabled": true,
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      {"name": "PLATFORM_ADMIN", "description": "Platform-wide administration"},
+      {"name": "STORE_OWNER", "description": "Store ownership"},
+      {"name": "STORE_MANAGER", "description": "Store operations"},
+      {"name": "STORE_EMPLOYEE", "description": "Store employee access"},
+      {"name": "CUSTOMER", "description": "Customer access"}
+    ]
+  },
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "name": "declarative-user-profile",
+        "providerId": "declarative-user-profile",
+        "config": {
+          "kc.user.profile.config": [
+            "{\"unmanagedAttributePolicy\":\"ADMIN_EDIT\",\"groups\":[],\"attributes\":[{\"name\":\"username\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"firstName\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"tenant_id\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"validations\":{\"length\":{\"max\":36}},\"multivalued\":false}]}"
+          ]
+        }
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "${KEYCLOAK_CLIENT_ID}",
+      "name": "Rafaga Backend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${KEYCLOAK_CLIENT_SECRET}",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "tenant-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "${KEYCLOAK_ADMIN_CLIENT_ID}",
+      "name": "Rafaga Backend Administration",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${KEYCLOAK_ADMIN_CLIENT_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "platform-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Platform",
+      "lastName": "Admin",
+      "email": "platform-admin@rafaga.test",
+      "attributes": {
+        "tenant_id": ["tenant-demo"]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "rafaga_dev_password",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["PLATFORM_ADMIN", "STORE_OWNER"]
+    },
+    {
+      "username": "service-account-${KEYCLOAK_ADMIN_CLIENT_ID}",
+      "enabled": true,
+      "serviceAccountClientId": "${KEYCLOAK_ADMIN_CLIENT_ID}",
+      "clientRoles": {
+        "realm-management": ["manage-users", "query-users", "view-realm", "view-users"]
+      }
+    }
+  ]
+}

@@ -29,5 +29,23 @@ services:
       timeout: 5s
       retries: 12
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    container_name: rafaga-keycloak
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-rafaga-backend}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-rafaga_dev_client_secret}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-rafaga-backend-admin}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-rafaga_dev_admin_client_secret}
+    ports:
+      - "${KEYCLOAK_PORT:-8082}:8080"
+    volumes:
+      - ./config/keycloak/import:/opt/keycloak/data/import:ro
+      - ./scripts/keycloak/initialize-realm.sh:/opt/keycloak/bin/initialize-realm.sh:ro
+    entrypoint: ["/bin/sh", "/opt/keycloak/bin/initialize-realm.sh"]
+
 volumes:
   rafaga_postgres_data:
