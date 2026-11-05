@@ -28,3 +28,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+  keycloak-test:
+    image: quay.io/keycloak/keycloak:26.8.1
+    container_name: rafaga-keycloak-test
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${TEST_KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${TEST_KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_CLIENT_ID: ${TEST_KEYCLOAK_CLIENT_ID:-rafaga-backend}
+      KEYCLOAK_CLIENT_SECRET: ${TEST_KEYCLOAK_CLIENT_SECRET:-rafaga_test_client_secret}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${TEST_KEYCLOAK_ADMIN_CLIENT_ID:-rafaga-backend-admin}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${TEST_KEYCLOAK_ADMIN_CLIENT_SECRET:-rafaga_test_admin_client_secret}
+    ports:
+      - "${TEST_KEYCLOAK_PORT:-8081}:8080"
+    volumes:
+      - ./config/keycloak/import:/opt/keycloak/data/import:ro
+      - ./scripts/keycloak/initialize-realm.sh:/opt/keycloak/bin/initialize-realm.sh:ro
+    entrypoint: ["/bin/sh", "/opt/keycloak/bin/initialize-realm.sh"]

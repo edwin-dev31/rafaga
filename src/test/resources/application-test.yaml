@@ -1,4 +1,9 @@
 spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:${TEST_KEYCLOAK_PORT:8081}/realms/rafaga/protocol/openid-connect/certs
   datasource:
     url: ${TEST_DB_SHARED_URL:jdbc:postgresql://localhost:5433/rafaga_test}
     username: ${TEST_DB_SHARED_USER:rafaga_test}
@@ -29,3 +34,15 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+
+rafaga:
+  web:
+    allowed-origins: ${TEST_ALLOWED_ORIGINS:http://localhost:3000}
+  identity:
+    registration-token: ${TEST_REGISTRATION_TOKEN:rafaga_test_registration_token}
+    keycloak:
+      issuer-uri: http://localhost:${TEST_KEYCLOAK_PORT:8081}/realms/rafaga
+      client-id: ${TEST_KEYCLOAK_CLIENT_ID:rafaga-backend}
+      client-secret: ${TEST_KEYCLOAK_CLIENT_SECRET:rafaga_test_client_secret}
+      admin-client-id: ${TEST_KEYCLOAK_ADMIN_CLIENT_ID:rafaga-backend-admin}
+      admin-client-secret: ${TEST_KEYCLOAK_ADMIN_CLIENT_SECRET:rafaga_test_admin_client_secret}

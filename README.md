@@ -86,6 +86,21 @@ docker compose up -d
 
 The default profile is `dev`. The health endpoint is available at `GET /actuator/health`.
 
+The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `PLATFORM_ADMIN` role, and the `tenant-demo` claim. The development database receives the matching `tenant-demo` tenant through a dev-only Flyway migration.
+
+To authenticate a local client, call the backend rather than Keycloak directly:
+
+```powershell
+$login = Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8080/api/public/auth/login `
+  -Headers @{ Host = 'demo.rafaga.test' } `
+  -ContentType 'application/json' `
+  -Body '{"username":"platform-admin","password":"rafaga_dev_password"}'
+$token = $login.accessToken
+```
+
+Use it with `Authorization: Bearer $token` and the `Host: demo.rafaga.test` header for tenant-scoped endpoints. The Keycloak administration console is at `http://localhost:8082`; credentials are controlled through `.env`.
+
 To stop the development environment:
 
 ```powershell
@@ -97,12 +112,17 @@ Development PostgreSQL data is stored in the `rafaga_postgres_data` volume.
 ## Testing
 
 Tests use isolated infrastructure: PostgreSQL on port `5433` and Redis on port `6380`. The test database is ephemeral.
+Keycloak is available on port `8081` with the same imported realm.
 
 ```powershell
 docker compose -f compose.test.yaml up -d
 .\gradlew.bat test
 docker compose -f compose.test.yaml down
 ```
+
+`AuthenticationEndpointsIntegrationTest` waits for Keycloak's OIDC discovery endpoint, then exercises the public authentication endpoints against the Keycloak service from `compose.test.yaml`, including user registration, login, JWT validation, local synchronization, and domain-based tenant resolution.
+
+Keycloak imports a realm only when it does not already exist. To apply changes to the checked-in realm definition during local development, remove the local stack with `docker compose down` and start it again.
 
 The build automatically activates the Spring `test` profile. Datasource-routing integration tests use Testcontainers and also require Docker.
 
@@ -126,6 +146,16 @@ Local values can be overridden with environment variables.
 | `TEST_DB_SHARED_PASSWORD` | `rafaga_test` | Test database password. |
 | `TEST_REDIS_HOST` | `localhost` | Test Redis host. |
 | `TEST_REDIS_PORT` | `6380` | Test Redis port. |
+| `KEYCLOAK_JWK_SET_URI` | Local Keycloak JWK endpoint | JWT public keys used by the resource server. |
+| `KEYCLOAK_ISSUER_URI` | Local Keycloak realm URL | Keycloak issuer and OIDC endpoints. |
+| `KEYCLOAK_CLIENT_ID` | — | Confidential client ID used only for direct Keycloak authentication. |
+| `KEYCLOAK_CLIENT_SECRET` | — | Confidential client secret; provide it through the environment, never the repository. |
+| `KEYCLOAK_ADMIN_CLIENT_ID` | `rafaga-backend-admin` | Service-account client used only by the backend to provision users. |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | — | Service-account client secret; provide it through the environment. |
+| `RAFAGA_IDENTITY_REGISTRATION_TOKEN` | — | Global secret required by `POST /api/public/auth/register`; use a long random value. |
+| `RAFAGA_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated static frontend origins accepted by CORS. |
+| `KEYCLOAK_ADMIN_USERNAME` | `admin` | Local Keycloak bootstrap administrator. |
+| `KEYCLOAK_ADMIN_PASSWORD` | — | Local Keycloak bootstrap administrator password. |
 
 Dedicated-database credentials are never stored in `TenantConfig`. `TenantDatabaseCredentialsProvider` is the port used to integrate the appropriate secrets manager.
 
@@ -153,7 +183,13 @@ Example request:
 
 For `DEDICATED_DB`, provide `databaseConfigId` as a secret reference. Never send or persist raw connection credentials in a request body.
 
-> Platform-role authorization and the concrete Keycloak integration are not available yet. Do not expose these endpoints publicly.
+These endpoints require the `PLATFORM_ADMIN` Keycloak role. They bypass tenant resolution because they operate at the platform level.
+
+## Frontend authentication contract
+
+Static frontends authenticate through the backend, not directly with Keycloak. Public endpoints are `POST /api/public/auth/login` and `POST /api/public/auth/register`. Registration requires `username`, `firstName`, `lastName`, `email`, `password`, and the `X-Registration-Token` header, compared by the backend with the global `RAFAGA_IDENTITY_REGISTRATION_TOKEN` environment secret. The tenant is always resolved from the request domain; registration requests must not include a trusted `tenantId` field.
+
+Keycloak is an internal dependency used by the backend for credential validation and user provisioning. Configure `RAFAGA_ALLOWED_ORIGINS` with the exact origins of the static frontends that may call this API.
 
 ## Database migrations
 
