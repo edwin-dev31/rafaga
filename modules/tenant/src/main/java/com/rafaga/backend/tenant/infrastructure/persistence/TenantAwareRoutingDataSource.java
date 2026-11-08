@@ -9,6 +9,8 @@ import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,6 +25,7 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
     private final TenantRegistry tenantRegistry;
     private final TenantDatabaseCredentialsProvider credentialsProvider;
     private final HikariDataSource sharedDataSource;
+    private final TenantConnectionCustomizer connectionCustomizer = new TenantConnectionCustomizer();
     private final Map<String, HikariDataSource> dedicatedDataSources = new ConcurrentHashMap<>();
 
     public TenantAwareRoutingDataSource(
@@ -78,7 +81,18 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
     }
 
     public DataSource getDataSourceForCurrentTenant() {
-        return determineTargetDataSource();
+        determineTargetDataSource();
+        return this;
+    }
+
+    @Override
+    public Connection getConnection() throws SQLException {
+        return connectionCustomizer.customize(super.getConnection());
+    }
+
+    @Override
+    public Connection getConnection(String username, String password) throws SQLException {
+        return connectionCustomizer.customize(super.getConnection(username, password));
     }
 
     static String dedicatedKey(String tenantId) {
