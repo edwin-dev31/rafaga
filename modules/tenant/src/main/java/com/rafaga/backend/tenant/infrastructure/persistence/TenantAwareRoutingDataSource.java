@@ -26,6 +26,7 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
     private final TenantDatabaseCredentialsProvider credentialsProvider;
     private final HikariDataSource sharedDataSource;
     private final TenantConnectionCustomizer connectionCustomizer = new TenantConnectionCustomizer();
+    private final ThreadLocal<Boolean> resolvingTenantConfiguration = ThreadLocal.withInitial(() -> false);
     private final Map<String, HikariDataSource> dedicatedDataSources = new ConcurrentHashMap<>();
 
     public TenantAwareRoutingDataSource(
@@ -45,11 +46,10 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
 
     @Override
     protected Object determineCurrentLookupKey() {
-        if (!TenantContext.isSet()) {
+        if (!TenantContext.isSet() || resolvingTenantConfiguration.get()) {
             return SYSTEM_KEY;
         }
-        TenantConfig tenant = tenantRegistry.findById(TenantContext.getCurrentTenantId())
-                .orElseThrow(() -> new IllegalStateException("Current tenant is not registered"));
+        TenantConfig tenant = tenantConfiguration(TenantContext.getCurrentTenantId());
         return tenant.deploymentMode() == DeploymentMode.DEDICATED_DB
                 ? dedicatedKey(tenant.tenantId()) : SHARED_KEY;
     }
@@ -61,8 +61,7 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
             return sharedDataSource;
         }
         String tenantId = TenantContext.getCurrentTenantId();
-        TenantConfig tenant = tenantRegistry.findById(tenantId)
-                .orElseThrow(() -> new IllegalStateException("Current tenant is not registered"));
+        TenantConfig tenant = tenantConfiguration(tenantId);
         return dedicatedDataSources.computeIfAbsent((String) lookupKey, ignored -> {
             HikariDataSource dataSource = createDedicatedDataSource(tenant);
             Map<Object, Object> targetDataSources = new HashMap<>();
@@ -97,6 +96,16 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
 
     static String dedicatedKey(String tenantId) {
         return "tenant-" + tenantId;
+    }
+
+    private TenantConfig tenantConfiguration(String tenantId) {
+        resolvingTenantConfiguration.set(true);
+        try {
+            return tenantRegistry.findById(tenantId)
+                    .orElseThrow(() -> new IllegalStateException("Current tenant is not registered"));
+        } finally {
+            resolvingTenantConfiguration.remove();
+        }
     }
 
     private HikariDataSource createDedicatedDataSource(TenantConfig tenant) {
