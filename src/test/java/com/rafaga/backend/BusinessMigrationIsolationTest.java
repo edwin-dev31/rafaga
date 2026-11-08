@@ -19,7 +19,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Testcontainers
-class CatalogMigrationIsolationTest {
+class BusinessMigrationIsolationTest {
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
 
@@ -108,6 +108,55 @@ class CatalogMigrationIsolationTest {
         }
     }
 
+    @Test
+    void filtersInventoryAndOrdersAndRejectsCrossTenantWrites() throws SQLException {
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Statement statement = tenantA.createStatement()) {
+            statement.execute("INSERT INTO stock_levels "
+                    + "(id, tenant_id, product_id, total_quantity, available_quantity, "
+                    + "reserved_quantity, reorder_level, reorder_quantity, last_updated) VALUES "
+                    + "('00000000-0000-0000-0000-0000000000a4', 'tenant-a', '" + PRODUCT_A
+                    + "', 10, 10, 0, 0, 0, NOW())");
+            statement.execute("INSERT INTO orders "
+                    + "(id, tenant_id, customer_id, status, subtotal, total, created_at, updated_at) VALUES "
+                    + "('00000000-0000-0000-0000-0000000000a5', 'tenant-a', "
+                    + "'00000000-0000-0000-0000-0000000000a6', 'PENDING', 10, 10, NOW(), NOW())");
+        }
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Connection tenantB = applicationConnection("tenant-b")) {
+            assertThat(rowCount(tenantA, "stock_levels")).isEqualTo(1);
+            assertThat(rowCount(tenantA, "orders")).isEqualTo(1);
+            assertThat(rowCount(tenantB, "stock_levels")).isZero();
+            assertThat(rowCount(tenantB, "orders")).isZero();
+            try (Statement statement = tenantB.createStatement()) {
+                assertThat(statement.executeUpdate("UPDATE stock_levels SET available_quantity = 9 "
+                        + "WHERE tenant_id = 'tenant-a'")).isZero();
+                assertThatThrownBy(() -> statement.execute("INSERT INTO orders "
+                        + "(id, tenant_id, customer_id, status, subtotal, total, created_at, updated_at) VALUES "
+                        + "('00000000-0000-0000-0000-0000000000b5', 'tenant-a', "
+                        + "'00000000-0000-0000-0000-0000000000b6', 'PENDING', 10, 10, NOW(), NOW())"))
+                        .isInstanceOf(SQLException.class);
+            }
+        }
+    }
+
+    @Test
+    void forcesRowLevelSecurityOnInventoryAndOrderTables() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT relname FROM pg_class WHERE relname IN "
+                        + "('stock_levels', 'inventory_movements', 'stock_reservations', 'orders', 'order_lines') "
+                        + "AND relrowsecurity AND relforcerowsecurity ORDER BY relname")) {
+            List<String> protectedTables = new ArrayList<>();
+            while (result.next()) {
+                protectedTables.add(result.getString(1));
+            }
+            assertThat(protectedTables).containsExactly(
+                    "inventory_movements", "order_lines", "orders", "stock_levels", "stock_reservations");
+        }
+    }
+
     private static Connection applicationConnection(String tenantId) throws SQLException {
         Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "catalog_app", "catalog_app");
         try (PreparedStatement statement = connection.prepareStatement("SELECT set_config('app.current_tenant', ?, false)")) {
@@ -125,6 +174,14 @@ class CatalogMigrationIsolationTest {
                 values.add(result.getString(1));
             }
             return values;
+        }
+    }
+
+    private static int rowCount(Connection connection, String table) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
+            result.next();
+            return result.getInt(1);
         }
     }
 }
