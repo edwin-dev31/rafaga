@@ -21,8 +21,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.Filter;
 
 @Entity
+@Filter(name = "catalogTenant", condition = "tenant_id = :tenantId")
 @Table(
         name = "product_variants",
         indexes = @Index(name = "idx_product_variants_tenant_id", columnList = "tenant_id"),

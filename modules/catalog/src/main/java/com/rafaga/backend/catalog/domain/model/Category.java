@@ -17,8 +17,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.hibernate.annotations.Filter;
 
 @Entity
+@Filter(name = "catalogTenant", condition = "tenant_id = :tenantId")
 @Table(
         name = "categories",
         indexes = @Index(name = "idx_categories_tenant_id", columnList = "tenant_id"),
@@ -57,11 +59,16 @@ public class Category {
     }
 
     public void update(String name, String slug, Category parent, int displayOrder) {
-        if (parent != null && !tenantId.equals(parent.tenantId)) {
+        if (parent != null && !tenantId.equals(parent.getTenantId())) {
             throw new IllegalArgumentException("Parent category belongs to another tenant");
         }
         if (parent == this) {
             throw new IllegalArgumentException("A category cannot be its own parent");
+        }
+        for (Category ancestor = parent; ancestor != null; ancestor = ancestor.getParent()) {
+            if (id != null && id.equals(ancestor.getId())) {
+                throw new IllegalArgumentException("A category cannot descend from itself");
+            }
         }
         this.name = Objects.requireNonNull(name, "name must not be null");
         this.slug = Objects.requireNonNull(slug, "slug must not be null");

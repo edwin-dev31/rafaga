@@ -25,8 +25,15 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.FilterDef;
+import org.hibernate.annotations.ParamDef;
 
 @Entity
+@FilterDef(name = "catalogTenant", parameters = @ParamDef(
+        name = "tenantId", type = String.class, resolver = CurrentTenantIdSupplier.class),
+        autoEnabled = true, applyToLoadByKey = true)
+@Filter(name = "catalogTenant", condition = "tenant_id = :tenantId")
 @Table(
         name = "products",
         indexes = @Index(name = "idx_products_tenant_id", columnList = "tenant_id"),
@@ -103,6 +110,17 @@ public class Product {
             throw new IllegalArgumentException("Category belongs to another tenant");
         }
         categories.add(category);
+    }
+
+    public void replaceCategories(Set<Category> replacements) {
+        Objects.requireNonNull(replacements, "replacements must not be null");
+        for (Category category : replacements) {
+            if (!tenantId.equals(category.getTenantId())) {
+                throw new IllegalArgumentException("Category belongs to another tenant");
+            }
+        }
+        categories.clear();
+        categories.addAll(replacements);
     }
 
     public void addVariant(ProductVariant variant) {
