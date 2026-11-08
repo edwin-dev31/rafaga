@@ -1,0 +1,130 @@
+package com.rafaga.backend;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+@Testcontainers
+class CatalogMigrationIsolationTest {
+    @Container
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
+
+    private static final String PRODUCT_A = "00000000-0000-0000-0000-0000000000a1";
+    private static final String PRODUCT_B = "00000000-0000-0000-0000-0000000000b1";
+    private static final String CATEGORY_A = "00000000-0000-0000-0000-0000000000a2";
+    private static final String CATEGORY_B = "00000000-0000-0000-0000-0000000000b2";
+
+    @BeforeAll
+    static void migrateAndSeed() throws SQLException {
+        Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement()) {
+            statement.execute("CREATE ROLE catalog_app LOGIN PASSWORD 'catalog_app'");
+            statement.execute("GRANT USAGE ON SCHEMA public TO catalog_app");
+            statement.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO catalog_app");
+            statement.execute("INSERT INTO tenants (id, name, deployment_mode, plan_id, status, created_at, updated_at) "
+                    + "VALUES ('tenant-a', 'A', 'SHARED_DB', 'starter', 'ACTIVE', NOW(), NOW()), "
+                    + "('tenant-b', 'B', 'SHARED_DB', 'starter', 'ACTIVE', NOW(), NOW())");
+        }
+
+        try (Connection connection = applicationConnection("tenant-a");
+                Statement statement = connection.createStatement()) {
+            statement.execute("INSERT INTO categories (id, tenant_id, name, slug, display_order) "
+                    + "VALUES ('" + CATEGORY_A + "', 'tenant-a', 'Category A', 'category-a', 0)");
+            statement.execute("INSERT INTO products (id, tenant_id, sku, name, base_price, status, created_at, updated_at) "
+                    + "VALUES ('" + PRODUCT_A + "', 'tenant-a', 'SKU-A', 'Product A', 10, 'ACTIVE', NOW(), NOW())");
+        }
+        try (Connection connection = applicationConnection("tenant-b");
+                Statement statement = connection.createStatement()) {
+            statement.execute("INSERT INTO categories (id, tenant_id, name, slug, display_order) "
+                    + "VALUES ('" + CATEGORY_B + "', 'tenant-b', 'Category B', 'category-b', 0)");
+            statement.execute("INSERT INTO products (id, tenant_id, sku, name, base_price, status, created_at, updated_at) "
+                    + "VALUES ('" + PRODUCT_B + "', 'tenant-b', 'SKU-B', 'Product B', 10, 'ACTIVE', NOW(), NOW())");
+        }
+    }
+
+    @Test
+    void filtersCatalogRowsByTenantAndDeniesAccessWithoutTenant() throws SQLException {
+        try (Connection missing = applicationConnection("");
+                Connection tenantA = applicationConnection("tenant-a");
+                Connection tenantB = applicationConnection("tenant-b")) {
+            assertThat(names(missing, "products")).isEmpty();
+            assertThat(names(tenantA, "products")).containsExactly("Product A");
+            assertThat(names(tenantB, "products")).containsExactly("Product B");
+            assertThat(names(tenantA, "categories")).containsExactly("Category A");
+            assertThat(names(tenantB, "categories")).containsExactly("Category B");
+        }
+    }
+
+    @Test
+    void blocksCrossTenantCategoryAssociationAndVariantOwnership() throws SQLException {
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Statement statement = tenantA.createStatement()) {
+            assertThatThrownBy(() -> statement.execute("INSERT INTO product_categories (product_id, category_id) "
+                    + "VALUES ('" + PRODUCT_A + "', '" + CATEGORY_B + "')"))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.execute("INSERT INTO product_variants "
+                    + "(id, tenant_id, product_id, sku, name, price_adjustment, status) VALUES "
+                    + "('00000000-0000-0000-0000-0000000000a3', 'tenant-a', '" + PRODUCT_B
+                    + "', 'VAR-A', 'Variant A', 0, 'ACTIVE')"))
+                    .isInstanceOf(SQLException.class);
+        }
+    }
+
+    @Test
+    void forcesRowLevelSecurityOnCatalogTables() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT relname FROM pg_class WHERE relname IN "
+                        + "('products', 'categories', 'product_variants', 'product_categories', 'variant_attributes') "
+                        + "AND relrowsecurity AND relforcerowsecurity ORDER BY relname")) {
+            List<String> protectedTables = new ArrayList<>();
+            while (result.next()) {
+                protectedTables.add(result.getString(1));
+            }
+            assertThat(protectedTables).containsExactly(
+                    "categories", "product_categories", "product_variants", "products", "variant_attributes");
+        }
+    }
+
+    private static Connection applicationConnection(String tenantId) throws SQLException {
+        Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "catalog_app", "catalog_app");
+        try (PreparedStatement statement = connection.prepareStatement("SELECT set_config('app.current_tenant', ?, false)")) {
+            statement.setString(1, tenantId);
+            statement.execute();
+        }
+        return connection;
+    }
+
+    private static List<String> names(Connection connection, String table) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT name FROM " + table + " ORDER BY name")) {
+            List<String> values = new ArrayList<>();
+            while (result.next()) {
+                values.add(result.getString(1));
+            }
+            return values;
+        }
+    }
+}
