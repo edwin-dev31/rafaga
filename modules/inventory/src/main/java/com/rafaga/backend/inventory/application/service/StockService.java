@@ -85,7 +85,7 @@ public class StockService {
         }
         String tenantId = TenantContext.getCurrentTenantId();
         StockLevel level = lockedLevel(tenantId, productId, variantId);
-        for (StockReservation existing : store.findActiveByReference(tenantId, referenceId)) {
+        for (StockReservation existing : store.findByReference(tenantId, referenceId)) {
             if (existing.getProductId().equals(productId)
                     && Objects.equals(existing.getVariantId(), variantId)) {
                 if (existing.getQuantity() != quantity) {

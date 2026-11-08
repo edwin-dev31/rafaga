@@ -17,6 +17,8 @@ interface StockReservationRepository extends JpaRepository<StockReservation, UUI
     List<StockReservation> findByTenantIdAndReferenceIdAndStatus(
             String tenantId, String referenceId, ReservationStatus status);
 
+    List<StockReservation> findByTenantIdAndReferenceId(String tenantId, String referenceId);
+
     List<StockReservation> findByTenantIdAndStatusAndExpiresAtBefore(
             String tenantId, ReservationStatus status, Instant now);
 }

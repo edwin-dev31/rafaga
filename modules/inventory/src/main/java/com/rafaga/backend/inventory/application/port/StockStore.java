@@ -16,6 +16,7 @@ public interface StockStore {
     List<InventoryMovement> findMovements(String tenantId, UUID productId, UUID variantId);
     StockReservation saveReservation(StockReservation reservation);
     Optional<StockReservation> lockReservation(String tenantId, UUID reservationId);
+    List<StockReservation> findByReference(String tenantId, String referenceId);
     List<StockReservation> findActiveByReference(String tenantId, String referenceId);
     List<StockReservation> findExpired(String tenantId, Instant now);
 }

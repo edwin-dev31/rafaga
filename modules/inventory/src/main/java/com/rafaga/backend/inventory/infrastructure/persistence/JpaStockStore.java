@@ -49,6 +49,10 @@ class JpaStockStore implements StockStore {
         return reservations.findByTenantIdAndId(tenantId, reservationId);
     }
 
+    public List<StockReservation> findByReference(String tenantId, String referenceId) {
+        return reservations.findByTenantIdAndReferenceId(tenantId, referenceId);
+    }
+
     public List<StockReservation> findActiveByReference(String tenantId, String referenceId) {
         return reservations.findByTenantIdAndReferenceIdAndStatus(tenantId, referenceId, ReservationStatus.ACTIVE);
     }
