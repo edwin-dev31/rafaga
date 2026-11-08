@@ -18,6 +18,23 @@ services:
     volumes:
       - rafaga_postgres_data:/var/lib/postgresql/data
 
+  postgres-role-setup:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-rafaga_shared}
+      POSTGRES_USER: ${POSTGRES_USER:-rafaga_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rafaga_dev}
+      DB_SHARED_USER: ${DB_SHARED_USER:-rafaga_runtime}
+      DB_SHARED_PASSWORD: ${DB_SHARED_PASSWORD:-rafaga_runtime_dev}
+    volumes:
+      - ./scripts/postgres/ensure-runtime-role.sh:/ensure-runtime-role.sh:ro
+    entrypoint: ["/bin/sh", "/ensure-runtime-role.sh"]
+    restart: "no"
+
   redis:
     image: redis:8-alpine
     container_name: rafaga-redis

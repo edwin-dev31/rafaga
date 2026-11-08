@@ -13,7 +13,16 @@ final class TenantConnectionCustomizer {
     private static final String SET_TENANT_SQL = "SELECT set_config('app.current_tenant', ?, false)";
 
     Connection customize(Connection connection) throws SQLException {
-        setTenant(connection, TenantContext.isSet() ? TenantContext.getCurrentTenantId() : "");
+        try {
+            setTenant(connection, TenantContext.isSet() ? TenantContext.getCurrentTenantId() : "");
+        } catch (SQLException exception) {
+            try {
+                connection.close();
+            } catch (SQLException closeException) {
+                exception.addSuppressed(closeException);
+            }
+            throw exception;
+        }
         AtomicBoolean closed = new AtomicBoolean();
         return (Connection) Proxy.newProxyInstance(
                 Connection.class.getClassLoader(),
@@ -21,8 +30,11 @@ final class TenantConnectionCustomizer {
                 (proxy, method, arguments) -> {
                     if (method.getName().equals("close") && method.getParameterCount() == 0) {
                         if (closed.compareAndSet(false, true)) {
-                            clearTenant(connection);
-                            connection.close();
+                            try {
+                                clearTenant(connection);
+                            } finally {
+                                connection.close();
+                            }
                         }
                         return null;
                     }

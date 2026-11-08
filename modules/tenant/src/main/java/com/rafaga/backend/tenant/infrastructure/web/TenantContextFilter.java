@@ -12,6 +12,9 @@ import java.io.IOException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -46,6 +49,13 @@ public class TenantContextFilter extends OncePerRequestFilter {
         String tenantId = tenantResolver.resolve(request).orElse(null);
         if (tenantId == null) {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unable to determine tenant for request");
+            return;
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof Jwt jwt
+                && !tenantId.equals(jwt.getClaimAsString("tenant_id"))) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Authenticated tenant does not match request tenant");
             return;
         }
         TenantRegistry registry = registryProvider.getIfAvailable();

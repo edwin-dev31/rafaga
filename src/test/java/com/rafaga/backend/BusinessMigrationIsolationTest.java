@@ -157,6 +157,37 @@ class BusinessMigrationIsolationTest {
         }
     }
 
+    @Test
+    void isolatesIdentityAssociations() throws SQLException {
+        String userA = "00000000-0000-0000-0000-0000000000c1";
+        String roleA = "00000000-0000-0000-0000-0000000000c2";
+        String roleB = "00000000-0000-0000-0000-0000000000d2";
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Statement statement = tenantA.createStatement()) {
+            statement.execute("INSERT INTO users (id, tenant_id, keycloak_id, username, email, status, created_at) "
+                    + "VALUES ('" + userA + "', 'tenant-a', 'keycloak-a', 'user-a', 'a@example.test', 'ACTIVE', NOW())");
+            statement.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('" + roleA
+                    + "', 'tenant-a', 'role-a')");
+            statement.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userA + "', '" + roleA + "')");
+            statement.execute("INSERT INTO role_permissions (role_id, permission) VALUES ('" + roleA
+                    + "', 'PRODUCT_READ')");
+        }
+        try (Connection tenantB = applicationConnection("tenant-b");
+                Statement statement = tenantB.createStatement()) {
+            statement.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('" + roleB
+                    + "', 'tenant-b', 'role-b')");
+            assertThat(rowCount(tenantB, "user_roles")).isZero();
+            assertThat(rowCount(tenantB, "role_permissions")).isZero();
+            assertThatThrownBy(() -> statement.execute("INSERT INTO user_roles (user_id, role_id) "
+                    + "VALUES ('" + userA + "', '" + roleB + "')"))
+                    .isInstanceOf(SQLException.class);
+        }
+        try (Connection tenantA = applicationConnection("tenant-a")) {
+            assertThat(rowCount(tenantA, "user_roles")).isEqualTo(1);
+            assertThat(rowCount(tenantA, "role_permissions")).isEqualTo(1);
+        }
+    }
+
     private static Connection applicationConnection(String tenantId) throws SQLException {
         Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "catalog_app", "catalog_app");
         try (PreparedStatement statement = connection.prepareStatement("SELECT set_config('app.current_tenant', ?, false)")) {

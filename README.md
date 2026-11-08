@@ -73,6 +73,7 @@ Run the following commands from the `backend` directory.
 ```powershell
 Copy-Item .env.example .env
 docker compose up -d
+docker compose run --rm postgres-role-setup
 .\gradlew.bat bootRun
 ```
 
@@ -81,6 +82,7 @@ On macOS or Linux:
 ```bash
 cp .env.example .env
 docker compose up -d
+docker compose run --rm postgres-role-setup
 ./gradlew bootRun
 ```
 
@@ -116,6 +118,7 @@ Keycloak is available on port `8081` with the same imported realm.
 
 ```powershell
 docker compose -f compose.test.yaml up -d
+docker compose -f compose.test.yaml run --rm postgres-role-setup-test
 .\gradlew.bat test
 docker compose -f compose.test.yaml down
 ```
@@ -139,11 +142,13 @@ Local values can be overridden with environment variables.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DB_SHARED_URL` | `jdbc:postgresql://localhost:5432/rafaga_shared` | Development shared PostgreSQL URL. |
-| `DB_SHARED_USER` | `rafaga_app` | Shared database user. |
-| `DB_SHARED_PASSWORD` | `rafaga_dev` | Local development password. |
+| `DB_SHARED_USER` | `rafaga_runtime` | Restricted shared database user for application queries. |
+| `DB_SHARED_PASSWORD` | `rafaga_runtime_dev` | Local development password for the restricted user. |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` | `rafaga_app` / `rafaga_dev` | Database administrator used by Flyway and role setup, never for application queries. |
 | `TEST_DB_SHARED_URL` | `jdbc:postgresql://localhost:5433/rafaga_test` | Test-profile PostgreSQL URL. |
-| `TEST_DB_SHARED_USER` | `rafaga_test` | Test database user. |
-| `TEST_DB_SHARED_PASSWORD` | `rafaga_test` | Test database password. |
+| `TEST_DB_SHARED_USER` | `rafaga_test_runtime` | Restricted test database user for application queries. |
+| `TEST_DB_SHARED_PASSWORD` | `rafaga_test_runtime` | Test password for the restricted user. |
+| `TEST_POSTGRES_USER` / `TEST_POSTGRES_PASSWORD` | `rafaga_test` / `rafaga_test` | Test database administrator used by Flyway and role setup. |
 | `TEST_REDIS_HOST` | `localhost` | Test Redis host. |
 | `TEST_REDIS_PORT` | `6380` | Test Redis port. |
 | `KEYCLOAK_JWK_SET_URI` | Local Keycloak JWK endpoint | JWT public keys used by the resource server. |
@@ -158,6 +163,7 @@ Local values can be overridden with environment variables.
 | `KEYCLOAK_ADMIN_PASSWORD` | — | Local Keycloak bootstrap administrator password. |
 
 Dedicated-database credentials are never stored in `TenantConfig`. `TenantDatabaseCredentialsProvider` is the port used to integrate the appropriate secrets manager.
+The `postgres-role-setup` services create or update the restricted application role and grant table access after PostgreSQL starts. Run them again after changing database credentials. PostgreSQL row-level security is enforced for application queries; Flyway uses the separate administrator connection.
 
 ## Tenant management API
 

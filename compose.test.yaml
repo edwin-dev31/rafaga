@@ -18,6 +18,23 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
 
+  postgres-role-setup-test:
+    image: postgres:16-alpine
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres-test
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-rafaga_test}
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-rafaga_test}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-rafaga_test}
+      DB_SHARED_USER: ${TEST_DB_SHARED_USER:-rafaga_test_runtime}
+      DB_SHARED_PASSWORD: ${TEST_DB_SHARED_PASSWORD:-rafaga_test_runtime}
+    volumes:
+      - ./scripts/postgres/ensure-runtime-role.sh:/ensure-runtime-role.sh:ro
+    entrypoint: ["/bin/sh", "/ensure-runtime-role.sh"]
+    restart: "no"
+
   redis-test:
     image: redis:8-alpine
     container_name: rafaga-redis-test
