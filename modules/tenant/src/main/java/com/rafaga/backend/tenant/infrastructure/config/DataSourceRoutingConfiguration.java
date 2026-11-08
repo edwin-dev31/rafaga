@@ -1,6 +1,7 @@
 package com.rafaga.backend.tenant.infrastructure.config;
 
 import com.rafaga.backend.tenant.application.port.TenantDatabaseCredentialsProvider;
+import com.rafaga.backend.tenant.application.port.DedicatedDatabaseMigration;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.infrastructure.persistence.TenantAwareRoutingDataSource;
 import com.zaxxer.hikari.HikariDataSource;
@@ -19,6 +20,7 @@ public class DataSourceRoutingConfiguration {
     TenantAwareRoutingDataSource tenantAwareRoutingDataSource(
             @Lazy TenantRegistry tenantRegistry,
             ObjectProvider<TenantDatabaseCredentialsProvider> credentialsProvider,
+            DedicatedDatabaseMigration databaseMigration,
             SharedDataSourceProperties sharedProperties) {
         HikariDataSource sharedDataSource = sharedProperties.createDataSource();
         TenantDatabaseCredentialsProvider provider = credentialsProvider.getIfAvailable();
@@ -27,6 +29,6 @@ public class DataSourceRoutingConfiguration {
                 throw new IllegalStateException("Dedicated database credentials provider is not configured");
             };
         }
-        return new TenantAwareRoutingDataSource(tenantRegistry, provider, sharedDataSource);
+        return new TenantAwareRoutingDataSource(tenantRegistry, provider, databaseMigration, sharedDataSource);
     }
 }

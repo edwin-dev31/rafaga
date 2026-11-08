@@ -3,6 +3,7 @@ package com.rafaga.backend.tenant.infrastructure.persistence;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.tenant.application.port.DatabaseConnectionDetails;
 import com.rafaga.backend.tenant.application.port.TenantDatabaseCredentialsProvider;
+import com.rafaga.backend.tenant.application.port.DedicatedDatabaseMigration;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.DatabaseConfig;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
@@ -24,6 +25,7 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
 
     private final TenantRegistry tenantRegistry;
     private final TenantDatabaseCredentialsProvider credentialsProvider;
+    private final DedicatedDatabaseMigration databaseMigration;
     private final HikariDataSource sharedDataSource;
     private final TenantConnectionCustomizer connectionCustomizer = new TenantConnectionCustomizer();
     private final ThreadLocal<Boolean> resolvingTenantConfiguration = ThreadLocal.withInitial(() -> false);
@@ -32,9 +34,11 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
     public TenantAwareRoutingDataSource(
             TenantRegistry tenantRegistry,
             TenantDatabaseCredentialsProvider credentialsProvider,
+            DedicatedDatabaseMigration databaseMigration,
             HikariDataSource sharedDataSource) {
         this.tenantRegistry = tenantRegistry;
         this.credentialsProvider = credentialsProvider;
+        this.databaseMigration = databaseMigration;
         this.sharedDataSource = sharedDataSource;
         Map<Object, Object> initialDataSources = new HashMap<>();
         initialDataSources.put(SYSTEM_KEY, sharedDataSource);
@@ -109,6 +113,7 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
     }
 
     private HikariDataSource createDedicatedDataSource(TenantConfig tenant) {
+        databaseMigration.migrate(tenant);
         DatabaseConfig databaseConfig = tenant.databaseConfig();
         if (databaseConfig == null) {
             throw new IllegalStateException("Dedicated tenant has no database secret reference");

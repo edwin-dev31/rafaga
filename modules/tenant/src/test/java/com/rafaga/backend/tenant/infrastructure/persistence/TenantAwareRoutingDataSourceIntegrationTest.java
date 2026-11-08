@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.tenant.application.port.DatabaseConnectionDetails;
 import com.rafaga.backend.tenant.application.port.TenantDatabaseCredentialsProvider;
+import com.rafaga.backend.tenant.application.port.DedicatedDatabaseMigration;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.DatabaseConfig;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
@@ -49,7 +50,7 @@ class TenantAwareRoutingDataSourceIntegrationTest {
         TenantDatabaseCredentialsProvider credentials = config -> new DatabaseConnectionDetails(
                 DEDICATED_POSTGRES.getJdbcUrl(), DEDICATED_POSTGRES.getUsername(), DEDICATED_POSTGRES.getPassword());
         TenantAwareRoutingDataSource routing = new TenantAwareRoutingDataSource(
-                registry, credentials, dataSourceFor(SHARED_POSTGRES));
+                registry, credentials, mock(DedicatedDatabaseMigration.class), dataSourceFor(SHARED_POSTGRES));
 
         TenantContext.setCurrentTenantId("shared");
         assertThat(currentDatabase(routing.getDataSourceForCurrentTenant().getConnection()))
