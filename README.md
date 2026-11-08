@@ -165,6 +165,16 @@ Local values can be overridden with environment variables.
 Dedicated-database credentials are never stored in `TenantConfig`. `TenantDatabaseCredentialsProvider` is the port used to integrate the appropriate secrets manager.
 The `postgres-role-setup` services create or update the restricted application role and grant table access after PostgreSQL starts. Run them again after changing database credentials. PostgreSQL row-level security is enforced for application queries; Flyway uses the separate administrator connection.
 
+## Database migrations
+
+Flyway runs the historical V1-V9 scripts from `src/main/resources/db/migration` without renaming or editing them. Put future migrations in `db/migration/{module}/` and use the next version in one sequence shared by all modules. Flyway scans those subdirectories. Keep the migration SQL compatible with both shared and dedicated databases.
+
+The V4 demo tenant seed is stored separately in `db/dev-migration` and is included by the `dev` profile. A new production or test database does not receive it. If an older database already has V4 in `flyway_schema_history`, startup includes the original V4 script for validation without re-executing it. Each database retains its own Flyway history.
+
+Startup migrates the shared database first and then every registered `DEDICATED_DB` tenant. The first connection to a newly registered dedicated database also runs pending migrations before opening the runtime pool. A failed startup migration stops application startup; a failed lazy migration prevents that tenant connection from opening. Dedicated database migrations require a `TenantDatabaseCredentialsProvider` implementation that supplies restricted runtime credentials via `resolve` and separate schema-owner credentials via `resolveForMigration`. Provision the runtime PostgreSQL role with database connection access before migration. A dedicated tenant without these credentials cannot be served. Flyway creates the schema in the dedicated database, synchronizes its tenant row for the existing foreign keys, and grants table access to the runtime role while keeping `flyway_schema_history` inaccessible to it.
+
+The platform registry tables `tenants`, `tenant_domains`, and `tenant_feature_flags` are read globally for domain resolution and tenant configuration, so they do not use tenant RLS. Business tables, including their association tables, use forced RLS based on `app.current_tenant`; the runtime database role must not own those tables or have `BYPASSRLS`.
+
 ## Tenant management API
 
 Administrative tenant endpoints are available under `/api/admin/tenants`.

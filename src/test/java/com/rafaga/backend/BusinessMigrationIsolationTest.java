@@ -188,6 +188,22 @@ class BusinessMigrationIsolationTest {
         }
     }
 
+    @Test
+    void forcesRowLevelSecurityOnIdentityAndAssociationTables() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT relname FROM pg_class WHERE relname IN "
+                        + "('users', 'roles', 'user_roles', 'role_permissions') "
+                        + "AND relrowsecurity AND relforcerowsecurity ORDER BY relname")) {
+            List<String> protectedTables = new ArrayList<>();
+            while (result.next()) {
+                protectedTables.add(result.getString(1));
+            }
+            assertThat(protectedTables).containsExactly("role_permissions", "roles", "user_roles", "users");
+        }
+    }
+
     private static Connection applicationConnection(String tenantId) throws SQLException {
         Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "catalog_app", "catalog_app");
         try (PreparedStatement statement = connection.prepareStatement("SELECT set_config('app.current_tenant', ?, false)")) {
