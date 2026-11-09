@@ -3,6 +3,8 @@ spring:
     name: rafaga-backend
   profiles:
     default: dev
+  main:
+    allow-bean-definition-overriding: true
 
 server:
   port: ${RAFAGA_SERVER_PORT:3117}
