@@ -4,6 +4,16 @@ spring:
   profiles:
     default: dev
 
+server:
+  port: ${RAFAGA_SERVER_PORT:3117}
+
+springdoc:
+  api-docs:
+    enabled: false
+
+scalar:
+  enabled: false
+
 rafaga:
   tenant:
     internal-header:

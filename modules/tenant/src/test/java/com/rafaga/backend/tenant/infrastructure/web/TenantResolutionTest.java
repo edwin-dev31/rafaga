@@ -46,7 +46,7 @@ class TenantResolutionTest {
         properties.setEnabled(true);
         properties.setTrustedCidrs(List.of("127.0.0.1/32"));
         CompositeTenantResolver resolver = new CompositeTenantResolver(
-                new DomainTenantResolver(registryProvider),
+                new DomainTenantResolver(registryProvider, ""),
                 new JwtClaimTenantResolver(),
                 new InternalHeaderTenantResolver(properties));
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -55,6 +55,27 @@ class TenantResolutionTest {
         request.addHeader("X-Tenant-ID", "tenant-header");
 
         assertThat(resolver.resolve(request)).contains("tenant-domain");
+    }
+
+    @Test
+    void fallsBackToTheConfiguredDevTenantOnlyForLoopbackHosts() {
+        TenantRegistry registry = mock(TenantRegistry.class);
+        when(registry.findByDomain("localhost")).thenReturn(Optional.empty());
+        when(registry.findByDomain("shop.example.test")).thenReturn(Optional.empty());
+        @SuppressWarnings("unchecked")
+        ObjectProvider<TenantRegistry> registryProvider = mock(ObjectProvider.class);
+        when(registryProvider.getIfAvailable()).thenReturn(registry);
+        DomainTenantResolver resolver = new DomainTenantResolver(registryProvider, "tenant-demo");
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setServerName("localhost");
+        assertThat(resolver.resolve(request)).contains("tenant-demo");
+
+        request.setServerName("127.0.0.1");
+        assertThat(resolver.resolve(request)).contains("tenant-demo");
+
+        request.setServerName("shop.example.test");
+        assertThat(resolver.resolve(request)).isEmpty();
     }
 
     private TenantConfig activeTenant(String id) {

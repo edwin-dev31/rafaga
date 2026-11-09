@@ -86,7 +86,7 @@ docker compose run --rm postgres-role-setup
 ./gradlew bootRun
 ```
 
-The default profile is `dev`. The health endpoint is available at `GET /actuator/health`.
+The default profile is `dev`. The backend listens on port `3117` unless `RAFAGA_SERVER_PORT` is set. The health endpoint is available at `GET /actuator/health`, and the OpenAPI documentation (dev only) is available at `http://localhost:3117/scalar` with the raw spec at `http://localhost:3117/v3/api-docs`.
 
 The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `PLATFORM_ADMIN` role, and the `tenant-demo` claim. The development database receives the matching `tenant-demo` tenant through a dev-only Flyway migration.
 
@@ -94,14 +94,14 @@ To authenticate a local client, call the backend rather than Keycloak directly:
 
 ```powershell
 $login = Invoke-RestMethod -Method Post `
-  -Uri http://localhost:8080/api/public/auth/login `
+  -Uri http://localhost:3117/api/public/auth/login `
   -Headers @{ Host = 'demo.rafaga.test' } `
   -ContentType 'application/json' `
   -Body '{"username":"platform-admin","password":"rafaga_dev_password"}'
 $token = $login.accessToken
 ```
 
-Use it with `Authorization: Bearer $token` and the `Host: demo.rafaga.test` header for tenant-scoped endpoints. The Keycloak administration console is at `http://localhost:8082`; credentials are controlled through `.env`.
+Use it with `Authorization: Bearer $token` for tenant-scoped endpoints. In dev, loopback hosts (`localhost`, `127.0.0.1`, `::1`) resolve to the `tenant-demo` tenant; use the `Host: demo.rafaga.test` header to exercise domain-based resolution. The Keycloak administration console is at `http://localhost:8080`; credentials are controlled through `.env`.
 
 To stop the development environment:
 

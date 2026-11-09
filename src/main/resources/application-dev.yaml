@@ -1,9 +1,11 @@
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   security:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:${KEYCLOAK_PORT:8082}/realms/rafaga/protocol/openid-connect/certs}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:${KEYCLOAK_PORT:8080}/realms/rafaga/protocol/openid-connect/certs}
   datasource:
     url: ${DB_SHARED_URL:jdbc:postgresql://localhost:5432/rafaga_shared}
     username: ${DB_SHARED_USER:rafaga_runtime}
@@ -35,16 +37,25 @@ spring:
           time_zone: UTC
 
 rafaga:
+  tenant:
+    dev-default-tenant: tenant-demo
   web:
     allowed-origins: ${RAFAGA_ALLOWED_ORIGINS:http://localhost:3000}
   identity:
     registration-token: ${RAFAGA_IDENTITY_REGISTRATION_TOKEN:}
     keycloak:
-      issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:${KEYCLOAK_PORT:8082}/realms/rafaga}
+      issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:${KEYCLOAK_PORT:8080}/realms/rafaga}
       client-id: ${KEYCLOAK_CLIENT_ID:rafaga-backend}
       client-secret: ${KEYCLOAK_CLIENT_SECRET:rafaga_dev_client_secret}
       admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:rafaga-backend-admin}
       admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:rafaga_dev_admin_client_secret}
+
+springdoc:
+  api-docs:
+    enabled: true
+
+scalar:
+  enabled: true
 
 logging:
   level:

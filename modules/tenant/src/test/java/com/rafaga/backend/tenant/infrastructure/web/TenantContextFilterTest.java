@@ -42,7 +42,7 @@ class TenantContextFilterTest {
         ObjectProvider<TenantRegistry> registryProvider = mock(ObjectProvider.class);
         when(registryProvider.getIfAvailable()).thenReturn(registry);
         CompositeTenantResolver resolver = new CompositeTenantResolver(
-                new DomainTenantResolver(registryProvider), new JwtClaimTenantResolver(),
+                new DomainTenantResolver(registryProvider, ""), new JwtClaimTenantResolver(),
                 new InternalHeaderTenantResolver(new TenantHeaderProperties()));
         TenantContextFilter filter = new TenantContextFilter(resolver, registryProvider);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/products");
@@ -65,6 +65,18 @@ class TenantContextFilterTest {
     }
 
     @Test
+    void skipsDocumentationAndErrorEndpoints() {
+        TenantContextFilter filter = new TenantContextFilter(mock(CompositeTenantResolver.class), mock(ObjectProvider.class));
+
+        for (String path : List.of("/scalar", "/scalar/scalar.js", "/v3/api-docs",
+                "/v3/api-docs/swagger-config", "/error", "/favicon.svg")) {
+            assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", path)))
+                    .as(path)
+                    .isTrue();
+        }
+    }
+
+    @Test
     void rejectsAuthenticatedRequestForAnotherTenant() throws Exception {
         TenantRegistry registry = mock(TenantRegistry.class);
         TenantConfig tenant = new TenantConfig("tenant-a", "Tenant A", List.of("a.example.test"),
@@ -74,7 +86,7 @@ class TenantContextFilterTest {
         ObjectProvider<TenantRegistry> registryProvider = mock(ObjectProvider.class);
         when(registryProvider.getIfAvailable()).thenReturn(registry);
         CompositeTenantResolver resolver = new CompositeTenantResolver(
-                new DomainTenantResolver(registryProvider), new JwtClaimTenantResolver(),
+                new DomainTenantResolver(registryProvider, ""), new JwtClaimTenantResolver(),
                 new InternalHeaderTenantResolver(new TenantHeaderProperties()));
         TenantContextFilter filter = new TenantContextFilter(resolver, registryProvider);
         Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject("user")

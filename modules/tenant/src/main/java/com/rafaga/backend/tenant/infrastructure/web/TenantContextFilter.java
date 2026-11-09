@@ -35,7 +35,11 @@ public class TenantContextFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.equals("/actuator/health")
+        return path.equals("/error")
+                || path.equals("/scalar") || path.startsWith("/scalar/")
+                || path.equals("/v3/api-docs") || path.startsWith("/v3/api-docs/")
+                || path.equals("/favicon.ico") || path.equals("/favicon.svg")
+                || path.equals("/actuator/health")
                 || (path.startsWith("/api/public/") && !path.startsWith("/api/public/auth/"))
                 || path.startsWith("/api/admin/");
     }
