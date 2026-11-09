@@ -204,6 +204,57 @@ class BusinessMigrationIsolationTest {
         }
     }
 
+    @Test
+    void filtersCartsAndEnforcesActiveCartAndCrossTenantRules() throws SQLException {
+        String cartA = "00000000-0000-0000-0000-0000000000e1";
+        String itemA = "00000000-0000-0000-0000-0000000000e2";
+        String customerA = "00000000-0000-0000-0000-0000000000e3";
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Statement statement = tenantA.createStatement()) {
+            statement.execute("INSERT INTO carts (id, tenant_id, customer_id, status, created_at, updated_at) "
+                    + "VALUES ('" + cartA + "', 'tenant-a', '" + customerA + "', 'ACTIVE', NOW(), NOW())");
+            statement.execute("INSERT INTO cart_items (id, tenant_id, cart_id, product_id, variant_id, "
+                    + "quantity, unit_price, line_total) VALUES ('" + itemA + "', 'tenant-a', '" + cartA
+                    + "', '" + PRODUCT_A + "', NULL, 2, 10.00, 20.00)");
+            assertThatThrownBy(() -> statement.execute("INSERT INTO carts "
+                    + "(id, tenant_id, customer_id, status, created_at, updated_at) VALUES "
+                    + "('00000000-0000-0000-0000-0000000000e4', 'tenant-a', '" + customerA
+                    + "', 'ACTIVE', NOW(), NOW())"))
+                    .isInstanceOf(SQLException.class);
+        }
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Connection tenantB = applicationConnection("tenant-b")) {
+            assertThat(rowCount(tenantA, "carts")).isEqualTo(1);
+            assertThat(rowCount(tenantA, "cart_items")).isEqualTo(1);
+            assertThat(rowCount(tenantB, "carts")).isZero();
+            assertThat(rowCount(tenantB, "cart_items")).isZero();
+            try (Statement statement = tenantB.createStatement()) {
+                assertThat(statement.executeUpdate("UPDATE carts SET status = 'ABANDONED' "
+                        + "WHERE tenant_id = 'tenant-a'")).isZero();
+                assertThatThrownBy(() -> statement.execute("INSERT INTO carts "
+                        + "(id, tenant_id, customer_id, status, created_at, updated_at) VALUES "
+                        + "('00000000-0000-0000-0000-0000000000e5', 'tenant-a', '" + customerA
+                        + "', 'ACTIVE', NOW(), NOW())"))
+                        .isInstanceOf(SQLException.class);
+            }
+        }
+    }
+
+    @Test
+    void forcesRowLevelSecurityOnCartTables() throws SQLException {
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT relname FROM pg_class WHERE relname IN "
+                        + "('carts', 'cart_items') AND relrowsecurity AND relforcerowsecurity ORDER BY relname")) {
+            List<String> protectedTables = new ArrayList<>();
+            while (result.next()) {
+                protectedTables.add(result.getString(1));
+            }
+            assertThat(protectedTables).containsExactly("cart_items", "carts");
+        }
+    }
+
     private static Connection applicationConnection(String tenantId) throws SQLException {
         Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), "catalog_app", "catalog_app");
         try (PreparedStatement statement = connection.prepareStatement("SELECT set_config('app.current_tenant', ?, false)")) {
