@@ -10,4 +10,6 @@ interface CartRepository extends JpaRepository<Cart, UUID> {
     Optional<Cart> findByIdAndTenantId(UUID id, String tenantId);
     Optional<Cart> findByTenantIdAndCustomerIdAndStatus(
             String tenantId, UUID customerId, CartStatus status);
+    Optional<Cart> findByTenantIdAndGuestSessionHashAndStatus(
+            String tenantId, String guestSessionHash, CartStatus status);
 }

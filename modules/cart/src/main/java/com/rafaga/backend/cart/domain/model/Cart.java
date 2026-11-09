@@ -36,8 +36,15 @@ public class Cart {
     @Column(name = "tenant_id", nullable = false, length = 36, updatable = false)
     private String tenantId;
 
-    @Column(name = "customer_id", nullable = false, updatable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "owner_type", nullable = false, length = 16, updatable = false)
+    private OwnerType ownerType;
+
+    @Column(name = "customer_id", updatable = false)
     private UUID customerId;
+
+    @Column(name = "guest_session_hash", length = 64, updatable = false)
+    private String guestSessionHash;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
@@ -57,10 +64,25 @@ public class Cart {
 
     protected Cart() { }
 
+    /** Creates a customer-owned cart. */
     public Cart(String tenantId, UUID customerId, Instant now) {
         id = UUID.randomUUID();
         this.tenantId = Objects.requireNonNull(tenantId);
+        this.ownerType = OwnerType.CUSTOMER;
         this.customerId = Objects.requireNonNull(customerId);
+        this.guestSessionHash = null;
+        createdAt = Objects.requireNonNull(now);
+        updatedAt = now;
+        status = CartStatus.ACTIVE;
+    }
+
+    /** Creates a guest-session-owned cart. */
+    public Cart(String tenantId, String guestSessionHash, Instant now) {
+        id = UUID.randomUUID();
+        this.tenantId = Objects.requireNonNull(tenantId);
+        this.ownerType = OwnerType.GUEST;
+        this.customerId = null;
+        this.guestSessionHash = Objects.requireNonNull(guestSessionHash);
         createdAt = Objects.requireNonNull(now);
         updatedAt = now;
         status = CartStatus.ACTIVE;
@@ -127,10 +149,22 @@ public class Cart {
 
     public UUID getId() { return id; }
     public String getTenantId() { return tenantId; }
+    public OwnerType getOwnerType() { return ownerType; }
     public UUID getCustomerId() { return customerId; }
+    public String getGuestSessionHash() { return guestSessionHash; }
     public CartStatus getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getCheckedOutAt() { return checkedOutAt; }
     public List<CartItem> getItems() { return Collections.unmodifiableList(items); }
+
+    /** Merges the items from another cart into this cart (guest → customer merge). */
+    public void mergeCart(Cart other, Instant now) {
+        requireActive();
+        Objects.requireNonNull(other, "other cart must not be null");
+        for (CartItem item : other.getItems()) {
+            upsertItem(item.getProductId(), item.getVariantId(), item.getQuantity(),
+                    item.getUnitPrice(), now);
+        }
+    }
 }

@@ -1,12 +1,14 @@
 package com.rafaga.backend.identity.infrastructure.security;
 
 import com.rafaga.backend.identity.infrastructure.web.CorsProperties;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -33,7 +35,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/api/public/**").permitAll()
+                        .requestMatchers("/actuator/health", "/api/public/**", "/api/storefront/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
@@ -43,16 +45,40 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(properties.getAllowedOrigins());
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Registration-Token"));
-        configuration.setExposedHeaders(List.of("Authorization"));
-        configuration.setAllowCredentials(false);
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
+    CorsConfigurationSource corsConfigurationSource(CorsProperties properties,
+            ObjectProvider<com.rafaga.backend.tenant.application.port.TenantRegistry> registryProvider) {
+        // Dynamic CORS source that resolves origins per tenant for storefront requests
+        return new CorsConfigurationSource() {
+            @Override
+            public CorsConfiguration getCorsConfiguration(HttpServletRequest request) {
+                CorsConfiguration configuration = new CorsConfiguration();
+                configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Registration-Token", "X-Tenant-ID"));
+                configuration.setExposedHeaders(List.of("Authorization", "Set-Cookie"));
+                configuration.setAllowCredentials(true);
+                configuration.setMaxAge(3600L);
+
+                // For storefront requests, resolve origins from tenant configuration
+                String path = request.getRequestURI();
+                if (path.startsWith("/api/storefront/")) {
+                    com.rafaga.backend.tenant.application.port.TenantRegistry registry = registryProvider.getIfAvailable();
+                    if (registry != null) {
+                        String serverName = request.getServerName();
+                        registry.findByDomain(serverName)
+                                .flatMap(tenant -> tenant.domains().stream().findFirst())
+                                .ifPresent(domain -> {
+                                    String origin = "https://" + domain;
+                                    configuration.setAllowedOrigins(List.of(origin));
+                                });
+                    }
+                }
+                // Fallback to global allowed origins
+                if (configuration.getAllowedOrigins() == null || configuration.getAllowedOrigins().isEmpty()) {
+                    configuration.setAllowedOrigins(properties.getAllowedOrigins());
+                }
+                return configuration;
+            }
+        };
     }
 
     @Bean

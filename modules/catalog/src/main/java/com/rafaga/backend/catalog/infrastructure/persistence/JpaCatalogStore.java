@@ -3,6 +3,7 @@ package com.rafaga.backend.catalog.infrastructure.persistence;
 import com.rafaga.backend.catalog.application.port.CatalogStore;
 import com.rafaga.backend.catalog.domain.model.Category;
 import com.rafaga.backend.catalog.domain.model.Product;
+import com.rafaga.backend.catalog.domain.model.ProductStatus;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -60,5 +61,15 @@ class JpaCatalogStore implements CatalogStore {
     @Override
     public List<Category> findCategories(String tenantId) {
         return categories.findAllByTenantIdOrderByDisplayOrderAscNameAsc(tenantId);
+    }
+
+    @Override
+    public Page<Product> findActiveProducts(String tenantId, Pageable pageable) {
+        return products.findAllByTenantIdAndStatus(tenantId, ProductStatus.ACTIVE, pageable);
+    }
+
+    @Override
+    public Optional<Product> findActiveProduct(UUID id, String tenantId) {
+        return products.findByIdAndTenantIdAndStatus(id, tenantId, ProductStatus.ACTIVE);
     }
 }

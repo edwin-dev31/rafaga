@@ -9,4 +9,6 @@ public interface CartStore {
     Optional<Cart> find(UUID cartId, String tenantId);
     /** Returns the single ACTIVE cart for a customer, if any. */
     Optional<Cart> findActiveByCustomer(String tenantId, UUID customerId);
+    /** Returns the single ACTIVE cart for a guest session, if any. */
+    Optional<Cart> findActiveByGuestSession(String tenantId, String guestSessionHash);
 }

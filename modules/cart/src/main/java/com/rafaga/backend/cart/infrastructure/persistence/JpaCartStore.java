@@ -26,4 +26,9 @@ class JpaCartStore implements CartStore {
     public Optional<Cart> findActiveByCustomer(String tenantId, UUID customerId) {
         return carts.findByTenantIdAndCustomerIdAndStatus(tenantId, customerId, CartStatus.ACTIVE);
     }
+
+    @Override
+    public Optional<Cart> findActiveByGuestSession(String tenantId, String guestSessionHash) {
+        return carts.findByTenantIdAndGuestSessionHashAndStatus(tenantId, guestSessionHash, CartStatus.ACTIVE);
+    }
 }
