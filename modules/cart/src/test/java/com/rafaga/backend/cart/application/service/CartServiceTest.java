@@ -12,6 +12,7 @@ import com.rafaga.backend.cart.application.command.UpsertCartItem;
 import com.rafaga.backend.cart.application.exception.CartNotFoundException;
 import com.rafaga.backend.cart.application.port.CartStore;
 import com.rafaga.backend.cart.application.port.CartCustomerAccess;
+import com.rafaga.backend.cart.application.service.storefront.GuestSessionService;
 import com.rafaga.backend.cart.domain.event.CartCheckedOutEvent;
 import com.rafaga.backend.cart.domain.model.Cart;
 import com.rafaga.backend.cart.domain.model.CartStatus;
@@ -47,12 +48,13 @@ class CartServiceTest {
     @Mock private CartCustomerAccess customerAccess;
     @Mock private ProductService products;
     @Mock private ApplicationEventPublisher publisher;
+    @Mock private GuestSessionService guestSessions;
 
     private CartService service;
 
     @BeforeEach
     void setUp() {
-        service = new CartService(store, customerAccess, products, publisher, FIXED);
+        service = new CartService(store, customerAccess, products, publisher, FIXED, guestSessions);
         TenantContext.setCurrentTenantId(TENANT);
     }
 
