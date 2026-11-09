@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -220,12 +221,199 @@ class StorefrontMultiTenantIsolationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void storefrontRejectsInactiveTenant() throws Exception {
+        // Register a suspended tenant
+        String uuid = UUID.randomUUID().toString().substring(0, 8);
+        String suspendedId = "suspended-" + uuid;
+        String suspendedDomain = "suspended-" + uuid + ".shop.test";
+        tenants.register(tenant(suspendedId, suspendedDomain, com.rafaga.backend.tenant.domain.model.TenantStatus.SUSPENDED));
+
+        // Request to the suspended tenant should return 403
+        mvc.perform(get("/api/storefront/products")
+                        .header("Host", suspendedDomain))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void storefrontDtoDoesNotExposeInternalFields() throws Exception {
+        // Create an ACTIVE product
+        String sku = "DTO-CHECK-" + UUID.randomUUID();
+        MvcResult created = mvc.perform(post("/api/products")
+                        .header("Host", tenantADomain)
+                        .with(jwtFor(tenantAId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"" + sku + "\",\"name\":\"DTO Test Product\","
+                                + "\"description\":\"Test description\","
+                                + "\"basePrice\":15.00}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String productId = mapper.readTree(created.getResponse().getContentAsString())
+                .path("id").asText();
+        mvc.perform(put("/api/products/{productId}", productId)
+                        .header("Host", tenantADomain)
+                        .with(jwtFor(tenantAId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"DTO Test Product\",\"basePrice\":15.00,\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+
+        // Verify the storefront response does NOT contain internal fields
+        MvcResult result = mvc.perform(get("/api/storefront/products/" + productId)
+                        .header("Host", tenantADomain))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String json = result.getResponse().getContentAsString();
+        // Should NOT contain tenantId, cost, or internal status fields
+        assertThat(json).doesNotContain("tenantId");
+        assertThat(json).doesNotContain("tenant_id");
+        assertThat(json).doesNotContain("cost");
+        assertThat(json).doesNotContain("createdAt");
+        assertThat(json).doesNotContain("updatedAt");
+        assertThat(json).doesNotContain("createdBy");
+        assertThat(json).doesNotContain("updatedBy");
+
+        // Should contain public fields
+        assertThat(json).contains("id");
+        assertThat(json).contains("sku");
+        assertThat(json).contains("name");
+        assertThat(json).contains("price");
+        assertThat(json).contains("available");
+    }
+
+    @Test
+    void storefrontRejectsJwtWithMismatchedTenant() throws Exception {
+        // Create a product in Tenant A
+        String sku = "JWT-MISMATCH-" + UUID.randomUUID();
+        MvcResult created = mvc.perform(post("/api/products")
+                        .header("Host", tenantADomain)
+                        .with(jwtFor(tenantAId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"" + sku + "\",\"name\":\"JWT Test\","
+                                + "\"basePrice\":10.00}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String productId = mapper.readTree(created.getResponse().getContentAsString())
+                .path("id").asText();
+        mvc.perform(put("/api/products/{productId}", productId)
+                        .header("Host", tenantADomain)
+                        .with(jwtFor(tenantAId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"JWT Test\",\"basePrice\":10.00,\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+
+        // Access Tenant A's storefront with a JWT that claims Tenant B
+        // The TenantContextFilter should reject this with 403
+        mvc.perform(get("/api/storefront/products/" + productId)
+                        .header("Host", tenantADomain)
+                        .with(jwtFor(tenantBId)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void guestCartCreatesSessionAndReturnsEmptyCart() throws Exception {
+        // Access the cart endpoint without a session cookie
+        MvcResult result = mvc.perform(get("/api/storefront/carts/current")
+                        .header("Host", tenantADomain))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        // Should return an empty cart
+        var cart = mapper.readTree(result.getResponse().getContentAsString());
+        assertThat(cart.path("items").isArray()).isTrue();
+        assertThat(cart.path("items")).isEmpty();
+
+        // Should set a guest session cookie
+        result.getResponse().getCookies();
+        String setCookie = result.getResponse().getHeader("Set-Cookie");
+        assertThat(setCookie).isNotNull();
+        assertThat(setCookie).contains("rafaga_guest_session");
+        assertThat(setCookie).contains("HttpOnly");
+        assertThat(setCookie).contains("Secure");
+    }
+
+    @Test
+    void guestCartIsIsolatedByTenant() throws Exception {
+        // Create a product in Tenant A to add to cart
+        String skuA = "CART-A-" + UUID.randomUUID();
+        MvcResult createdA = mvc.perform(post("/api/products")
+                        .header("Host", tenantADomain)
+                        .with(jwtFor(tenantAId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"" + skuA + "\",\"name\":\"Cart Product A\","
+                                + "\"basePrice\":10.00}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String productIdA = mapper.readTree(createdA.getResponse().getContentAsString())
+                .path("id").asText();
+        mvc.perform(put("/api/products/{productId}", productIdA)
+                        .header("Host", tenantADomain)
+                        .with(jwtFor(tenantAId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Cart Product A\",\"basePrice\":10.00,\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+
+        // Get or create a cart in Tenant A (creates session cookie)
+        MvcResult cartA1 = mvc.perform(get("/api/storefront/carts/current")
+                        .header("Host", tenantADomain))
+                .andExpect(status().isOk())
+                .andReturn();
+        String sessionCookie = cartA1.getResponse().getHeader("Set-Cookie");
+        String sessionId = extractSessionId(sessionCookie);
+
+        // Add an item to Tenant A's cart
+        mvc.perform(put("/api/storefront/carts/current/items")
+                        .header("Host", tenantADomain)
+                        .cookie(new jakarta.servlet.http.Cookie("rafaga_guest_session", sessionId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productId\":\"" + productIdA + "\",\"quantity\":2}"))
+                .andExpect(status().isOk());
+
+        // Verify the cart has the item
+        MvcResult cartA2 = mvc.perform(get("/api/storefront/carts/current")
+                        .header("Host", tenantADomain)
+                        .cookie(new jakarta.servlet.http.Cookie("rafaga_guest_session", sessionId)))
+                .andExpect(status().isOk())
+                .andReturn();
+        var cartAContent = mapper.readTree(cartA2.getResponse().getContentAsString());
+        assertThat(cartAContent.path("items").isArray()).isTrue();
+        assertThat(cartAContent.path("items")).isNotEmpty();
+
+        // The same session ID should NOT work in Tenant B (tenant isolation in Redis key)
+        // Tenant B should create a new session or return empty cart
+        MvcResult cartB = mvc.perform(get("/api/storefront/carts/current")
+                        .header("Host", tenantBDomain)
+                        .cookie(new jakarta.servlet.http.Cookie("rafaga_guest_session", sessionId)))
+                .andExpect(status().isOk())
+                .andReturn();
+        var cartBContent = mapper.readTree(cartB.getResponse().getContentAsString());
+        // Tenant B's cart should be empty (session is tenant-scoped)
+        assertThat(cartBContent.path("items")).isEmpty();
+    }
+
     private org.springframework.test.web.servlet.request.RequestPostProcessor jwtFor(String tenantId) {
         return jwt().jwt(jwt -> jwt.claim("tenant_id", tenantId));
     }
 
     private TenantConfig tenant(String id, String domain) {
+        return tenant(id, domain, TenantStatus.ACTIVE);
+    }
+
+    private TenantConfig tenant(String id, String domain, TenantStatus status) {
         return new TenantConfig(id, id, List.of(domain), DeploymentMode.SHARED_DB,
-                null, "test", TenantStatus.ACTIVE, Map.of("catalog", true));
+                null, "test", status, Map.of("catalog", true));
+    }
+
+    private String extractSessionId(String setCookieHeader) {
+        if (setCookieHeader == null) {
+            throw new IllegalStateException("No Set-Cookie header found");
+        }
+        for (String part : setCookieHeader.split(";")) {
+            String trimmed = part.trim();
+            if (trimmed.startsWith("rafaga_guest_session=")) {
+                return trimmed.substring("rafaga_guest_session=".length());
+            }
+        }
+        throw new IllegalStateException("Session ID not found in Set-Cookie: " + setCookieHeader);
     }
 }
