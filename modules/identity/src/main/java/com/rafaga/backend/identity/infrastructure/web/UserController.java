@@ -27,19 +27,19 @@ public class UserController {
     }
 
     @GetMapping("/{userId}")
-    public UserResponse getUser(@PathVariable UUID userId) {
+    public UserResponse getUser(@PathVariable("userId") UUID userId) {
         return UserResponse.from(userService.getUserById(userId));
     }
 
     @GetMapping("/{userId}/roles")
-    public List<RoleResponse> getRoles(@PathVariable UUID userId) {
+    public List<RoleResponse> getRoles(@PathVariable("userId") UUID userId) {
         return userService.getUserRoles(userId).stream().map(RoleResponse::from).toList();
     }
 
     @PostMapping("/{userId}/roles/{roleId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("@userService.hasCurrentUserPermission(T(com.rafaga.backend.identity.domain.model.Permission).USER_MANAGE)")
-    public void assignRole(@PathVariable UUID userId, @PathVariable UUID roleId) {
+    public void assignRole(@PathVariable("userId") UUID userId, @PathVariable("roleId") UUID roleId) {
         userService.assignRoleToUser(userId, roleId);
     }
 

@@ -67,6 +67,10 @@ subprojects {
 	apply plugin: 'java-library'
 	apply plugin: 'io.spring.dependency-management'
 
+	tasks.withType(JavaCompile).configureEach {
+		options.compilerArgs += '-parameters'
+	}
+
 	java {
 		toolchain {
 			languageVersion = JavaLanguageVersion.of(25)

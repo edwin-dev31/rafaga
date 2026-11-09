@@ -36,13 +36,13 @@ public class TenantAdminController {
     }
 
     @GetMapping("/{tenantId}")
-    public TenantResponse getById(@PathVariable String tenantId) {
+    public TenantResponse getById(@PathVariable("tenantId") String tenantId) {
         return TenantResponse.from(tenantService.getTenantById(tenantId));
     }
 
     @PutMapping("/{tenantId}")
     public TenantResponse update(
-            @PathVariable String tenantId,
+            @PathVariable("tenantId") String tenantId,
             @Valid @RequestBody TenantRequest request) {
         return TenantResponse.from(tenantService.updateTenant(tenantId, request.toUpdate()));
     }
