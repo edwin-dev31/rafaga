@@ -9,6 +9,7 @@ import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.domain.model.TenantStatus;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,8 @@ class RedisCacheIntegrationTest {
 
     @BeforeEach
     void clearCacheRegions() {
+        cacheProbe.reset();
+        TenantContext.clear();
         List.of("tenants", "feature-flags", "products", "categories").forEach(cacheName ->
                 cacheManager.getCache(cacheName).clear());
     }
@@ -44,23 +47,24 @@ class RedisCacheIntegrationTest {
 
     @Test
     void cachesPerTenantAndEvictsTheAffectedProduct() {
+        String productId = "product-" + UUID.randomUUID();
         TenantContext.setCurrentTenantId("tenant-a");
-        assertThat(cacheProbe.load("product-1")).isEqualTo("value-1");
-        assertThat(cacheProbe.load("product-1")).isEqualTo("value-1");
+        assertThat(cacheProbe.load(productId)).isEqualTo("value-1");
+        assertThat(cacheProbe.load(productId)).isEqualTo("value-1");
         assertThat(cacheProbe.invocations()).isEqualTo(1);
 
         TenantContext.setCurrentTenantId("tenant-b");
-        assertThat(cacheProbe.load("product-1")).isEqualTo("value-2");
+        assertThat(cacheProbe.load(productId)).isEqualTo("value-2");
         assertThat(cacheProbe.invocations()).isEqualTo(2);
 
-        cacheProbe.evict("product-1");
-        assertThat(cacheProbe.load("product-1")).isEqualTo("value-3");
+        cacheProbe.evict(productId);
+        assertThat(cacheProbe.load(productId)).isEqualTo("value-3");
         assertThat(cacheProbe.invocations()).isEqualTo(3);
     }
 
     @Test
     void preservesTenantConfigTypeWhenReadingFromRedis() {
-        TenantConfig expected = new TenantConfig("tenant-a", "Store A", List.of("a.test"),
+        TenantConfig expected = new TenantConfig("tenant-" + UUID.randomUUID(), "Store A", List.of("a.test"),
                 DeploymentMode.SHARED_DB, null, "starter", TenantStatus.ACTIVE,
                 Map.of("catalog", true));
 
@@ -114,6 +118,11 @@ class RedisCacheIntegrationTest {
 
         int tenantConfigInvocations() {
             return tenantConfigInvocations.get();
+        }
+
+        void reset() {
+            invocations.set(0);
+            tenantConfigInvocations.set(0);
         }
     }
 }

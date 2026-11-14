@@ -248,4 +248,5 @@ Flyway runs migrations during application startup. Hibernate runs with `ddl-auto
 - Associate and validate all business data against `TenantContext`.
 - Add or update the Flyway migration in the same change that modifies a persistent model.
 - Run `./gradlew test` before creating a functional commit.
+- Logs are structured JSON and include `tenantId`; never log passwords, OAuth tokens, registration tokens, payment data, or complete request headers.
 - Use conventional commits: `feat(<module>):`, `test(<module>):`, `fix(<module>):`, `refactor(<module>):`, or `chore:`.

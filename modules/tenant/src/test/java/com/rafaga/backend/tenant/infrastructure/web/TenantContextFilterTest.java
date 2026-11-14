@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
@@ -16,6 +19,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -105,5 +109,28 @@ class TenantContextFilterTest {
         assertThat(response.getStatus()).as(response.getErrorMessage()).isEqualTo(403);
         assertThat(invoked).isFalse();
         assertThat(TenantContext.isSet()).isFalse();
+    }
+
+    @Test
+    void logsTenantResolutionFailuresWithoutRequestData() throws Exception {
+        CompositeTenantResolver resolver = mock(CompositeTenantResolver.class);
+        when(resolver.resolve(org.mockito.ArgumentMatchers.any())).thenReturn(Optional.empty());
+        TenantContextFilter filter = new TenantContextFilter(resolver, mock(ObjectProvider.class));
+        Logger logger = (Logger) LoggerFactory.getLogger(TenantContextFilter.class);
+        ListAppender<ILoggingEvent> events = new ListAppender<>();
+        events.start();
+        logger.addAppender(events);
+
+        try {
+            filter.doFilter(new MockHttpServletRequest("GET", "/api/products"), new MockHttpServletResponse(),
+                    (request, response) -> { });
+            assertThat(events.list).anySatisfy(event ->
+                    assertThat(event.getFormattedMessage()).contains("Tenant resolution failed"));
+            assertThat(events.list).anySatisfy(event ->
+                    assertThat(event.getMDCPropertyMap())
+                            .containsEntry(TenantLoggingInterceptor.TENANT_ID, TenantLoggingInterceptor.SYSTEM_TENANT));
+        } finally {
+            logger.detachAppender(events);
+        }
     }
 }

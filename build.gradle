@@ -52,6 +52,7 @@ dependencies {
 	implementation 'org.flywaydb:flyway-database-postgresql'
 	implementation 'org.springframework.modulith:spring-modulith-starter-core'
 	implementation 'org.springframework.modulith:spring-modulith-starter-jpa'
+	implementation 'net.logstash.logback:logstash-logback-encoder:8.1'
 	runtimeOnly 'org.postgresql:postgresql'
 	runtimeOnly 'org.springframework.modulith:spring-modulith-runtime'
 

@@ -61,4 +61,5 @@ scalar:
 
 logging:
   level:
+    root: WARN
     com.rafaga.backend: WARN

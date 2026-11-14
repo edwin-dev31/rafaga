@@ -22,9 +22,12 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class UserService {
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
     private final AuthenticationPort authenticationPort;
     private final IdentityStore identityStore;
     private final RegistrationTokenValidator registrationTokenValidator;
@@ -53,13 +56,16 @@ public class UserService {
     public AuthenticationTokens authenticateUser(String username, String password) {
         AuthenticationTokens tokens = authenticationPort.login(username, password);
         synchronizeProfile(authenticationPort.getUserInfo(tokens.accessToken()));
+        log.info("Authentication succeeded for tenant {}", TenantContext.getCurrentTenantId());
         return tokens;
     }
 
     @Transactional
     public UserProfile registerUser(String registrationToken, UserRegistration registration) {
         registrationTokenValidator.validate(registrationToken);
-        return synchronizeProfile(authenticationPort.registerUser(currentTenantId(), registration));
+        UserProfile user = synchronizeProfile(authenticationPort.registerUser(currentTenantId(), registration));
+        log.info("User registration succeeded for tenant {}", currentTenantId());
+        return user;
     }
 
     @Transactional(readOnly = true)

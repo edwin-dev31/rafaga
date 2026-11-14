@@ -5,6 +5,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.event.FeatureFlagUpdatedEvent;
@@ -16,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 
 class FeatureFlagServiceTest {
@@ -33,6 +37,27 @@ class FeatureFlagServiceTest {
 
         assertThat(service.isFeatureEnabled("analytics")).isFalse();
         assertThat(service.getAllFeatures()).containsEntry("analytics", false);
+    }
+
+    @Test
+    void logsFeatureDenialsWithTenantContext() {
+        TenantRegistry registry = mock(TenantRegistry.class);
+        when(registry.findById("tenant-1")).thenReturn(Optional.of(tenant(Map.of("analytics", false))));
+        FeatureFlagService service = new FeatureFlagService(registry, mock(ApplicationEventPublisher.class));
+        TenantContext.setCurrentTenantId("tenant-1");
+        Logger logger = (Logger) LoggerFactory.getLogger(FeatureFlagService.class);
+        ListAppender<ILoggingEvent> events = new ListAppender<>();
+        events.start();
+        logger.addAppender(events);
+
+        try {
+            assertThat(service.isFeatureEnabled("analytics")).isFalse();
+            assertThat(events.list).anySatisfy(event ->
+                    assertThat(event.getFormattedMessage())
+                            .contains("tenant-1", "analytics"));
+        } finally {
+            logger.detachAppender(events);
+        }
     }
 
     @Test

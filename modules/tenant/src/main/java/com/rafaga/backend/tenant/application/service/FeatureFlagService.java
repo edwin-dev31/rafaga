@@ -12,9 +12,12 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class FeatureFlagService {
+    private static final Logger log = LoggerFactory.getLogger(FeatureFlagService.class);
     private final TenantRegistry tenantRegistry;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -26,7 +29,11 @@ public class FeatureFlagService {
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = "feature-flags", key = "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0")
     public boolean isFeatureEnabled(String featureName) {
-        return getAllFeatures().getOrDefault(featureName, false);
+        boolean enabled = getAllFeatures().getOrDefault(featureName, false);
+        if (!enabled) {
+            log.warn("Feature access denied for tenant {} and feature {}", TenantContext.getCurrentTenantId(), featureName);
+        }
+        return enabled;
     }
 
     @Transactional(readOnly = true)
