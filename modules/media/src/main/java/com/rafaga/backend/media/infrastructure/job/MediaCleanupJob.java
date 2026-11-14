@@ -66,6 +66,8 @@ public class MediaCleanupJob {
                         log.error("Failed to delete asset {} from R2: {}", asset.getId(), e.getMessage());
                     }
                 }
+            } catch (Exception e) {
+                log.error("Failed to process tenant {}: {}", tenant.tenantId(), e.getMessage());
             } finally {
                 TenantContext.clear();
             }
@@ -94,6 +96,8 @@ public class MediaCleanupJob {
                         log.error("Failed to clean up expired asset {}: {}", asset.getId(), e.getMessage());
                     }
                 }
+            } catch (Exception e) {
+                log.error("Failed to process tenant {}: {}", tenant.tenantId(), e.getMessage());
             } finally {
                 TenantContext.clear();
             }
@@ -110,6 +114,8 @@ public class MediaCleanupJob {
                 TenantContext.setCurrentTenantId(tenant.tenantId());
                 // Per-tenant reconciliation logic here
                 log.info("Reconciled tenant {}", tenant.tenantId());
+            } catch (Exception e) {
+                log.error("Failed to reconcile tenant {}: {}", tenant.tenantId(), e.getMessage());
             } finally {
                 TenantContext.clear();
             }
@@ -147,6 +153,8 @@ public class MediaCleanupJob {
                             asset.getId(), e.getMessage());
                     }
                 }
+            } catch (Exception e) {
+                log.error("Failed to process tenant {}: {}", tenant.tenantId(), e.getMessage());
             } finally {
                 TenantContext.clear();
             }
