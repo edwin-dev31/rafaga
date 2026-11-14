@@ -17,11 +17,12 @@ class SecurityConfigTest {
                 Instant.now(),
                 Instant.now().plusSeconds(300),
                 Map.of("alg", "none"),
-                Map.of("sub", "user-1", "realm_access", Map.of("roles", List.of("PLATFORM_ADMIN"))));
+                Map.of("sub", "user-1", "realm_access",
+                        Map.of("roles", List.of("SUPER_ADMIN", "STORE_MANAGER"))));
         JwtAuthenticationConverter converter = new SecurityConfig().jwtAuthenticationConverter();
 
         assertThat(converter.convert(jwt).getAuthorities())
                 .extracting("authority")
-                .contains("ROLE_PLATFORM_ADMIN");
+                .contains("ROLE_SUPER_ADMIN", "ROLE_STORE_MANAGER");
     }
 }

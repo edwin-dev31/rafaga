@@ -35,9 +35,17 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health/**", "/api/public/**", "/api/storefront/**").permitAll()
-                        .requestMatchers("/actuator/**").hasRole("PLATFORM_ADMIN")
-                        .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
+                        .requestMatchers("/actuator/health/**").permitAll()
+                        .requestMatchers("/api/public/auth/login").permitAll()
+                        .requestMatchers("/api/public/auth/register").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/public/**").denyAll()
+                        .requestMatchers("/api/storefront/**").permitAll()
+                        .requestMatchers("/actuator/**", "/api/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/users/me").hasAnyRole("SUPER_ADMIN", "STORE_MANAGER")
+                        .requestMatchers("/api/users/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/products/**", "/api/categories/**", "/api/stock/**",
+                                "/api/orders/**", "/api/carts/**")
+                                .hasAnyRole("SUPER_ADMIN", "STORE_MANAGER")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer

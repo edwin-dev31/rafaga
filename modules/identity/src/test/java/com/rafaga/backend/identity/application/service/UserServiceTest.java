@@ -18,14 +18,10 @@ import com.rafaga.backend.identity.application.port.IdentityStore;
 import com.rafaga.backend.identity.application.port.UserRegistration;
 import com.rafaga.backend.identity.application.security.RegistrationProperties;
 import com.rafaga.backend.identity.application.security.RegistrationTokenValidator;
-import com.rafaga.backend.identity.domain.model.Permission;
-import com.rafaga.backend.identity.domain.model.Role;
 import com.rafaga.backend.identity.domain.model.User;
 import java.time.Instant;
-import java.util.EnumSet;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -40,22 +36,6 @@ class UserServiceTest {
     void clearSecurityContext() {
         TenantContext.clear();
         SecurityContextHolder.clearContext();
-    }
-
-    @Test
-    void checksPermissionsUsingOnlyTheCurrentTenantsUser() {
-        TenantContext.setCurrentTenantId(TENANT_ID);
-        IdentityStore store = mock(IdentityStore.class);
-        AuthenticationPort authentication = mock(AuthenticationPort.class);
-        UUID userId = UUID.randomUUID();
-        Role role = new Role(TENANT_ID, "STORE_OWNER", "Store owner", EnumSet.of(Permission.PRODUCT_UPDATE));
-        User user = mock(User.class);
-        when(user.getRoles()).thenReturn(Set.of(role));
-        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
-        UserService service = service(authentication, store);
-
-        assertThat(service.hasPermission(userId, Permission.PRODUCT_UPDATE)).isTrue();
-        assertThat(service.hasPermission(userId, Permission.USER_MANAGE)).isFalse();
     }
 
     @Test
@@ -82,24 +62,6 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> service.authenticateUser("person@example.test", "secret"))
                 .isInstanceOf(CrossTenantAccessException.class);
-    }
-
-    @Test
-    void assignsAWithinTenantRoleToTheUser() {
-        TenantContext.setCurrentTenantId(TENANT_ID);
-        IdentityStore store = mock(IdentityStore.class);
-        UUID userId = UUID.randomUUID();
-        UUID roleId = UUID.randomUUID();
-        User user = new User(TENANT_ID, "keycloak-1", "person", "person@example.test", Instant.now());
-        Role role = new Role(TENANT_ID, "STORE_MANAGER", "Store manager", EnumSet.of(Permission.USER_MANAGE));
-        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
-        when(store.findRoleById(TENANT_ID, roleId)).thenReturn(Optional.of(role));
-        UserService service = service(mock(AuthenticationPort.class), store);
-
-        service.assignRoleToUser(userId, roleId);
-
-        assertThat(user.getRoles()).contains(role);
-        verify(store).saveUser(user);
     }
 
     @Test

@@ -24,11 +24,19 @@ public class AuthenticatedCartCustomerAccess implements CartCustomerAccess {
         if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
             throw new AccessDeniedException("Cart access requires an authenticated user");
         }
+        if (isSuperAdmin(authentication)) {
+            return;
+        }
         var user = identities.findCustomerAccess(TenantContext.getCurrentTenantId(), jwt.getSubject())
                 .orElseThrow(() -> new AccessDeniedException("Authenticated user is not registered"));
-        if (customerId.equals(user.userId()) || user.canManageUsers()) {
+        if (customerId.equals(user.userId())) {
             return;
         }
         throw new AccessDeniedException("Cart belongs to another customer");
+    }
+
+    private boolean isSuperAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 }

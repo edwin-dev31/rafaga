@@ -5,10 +5,8 @@
   "registrationAllowed": false,
   "roles": {
     "realm": [
-      {"name": "PLATFORM_ADMIN", "description": "Platform-wide administration"},
-      {"name": "STORE_OWNER", "description": "Store ownership"},
+      {"name": "SUPER_ADMIN", "description": "Platform-wide administration"},
       {"name": "STORE_MANAGER", "description": "Store operations"},
-      {"name": "STORE_EMPLOYEE", "description": "Store employee access"},
       {"name": "CUSTOMER", "description": "Customer access"}
     ]
   },
@@ -84,7 +82,7 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["PLATFORM_ADMIN", "STORE_OWNER"]
+      "realmRoles": ["SUPER_ADMIN"]
     },
     {
       "username": "service-account-${KEYCLOAK_ADMIN_CLIENT_ID}",

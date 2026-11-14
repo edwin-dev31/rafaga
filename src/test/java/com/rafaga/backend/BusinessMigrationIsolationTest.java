@@ -158,49 +158,35 @@ class BusinessMigrationIsolationTest {
     }
 
     @Test
-    void isolatesIdentityAssociations() throws SQLException {
+    void isolatesIdentityUsers() throws SQLException {
         String userA = "00000000-0000-0000-0000-0000000000c1";
-        String roleA = "00000000-0000-0000-0000-0000000000c2";
-        String roleB = "00000000-0000-0000-0000-0000000000d2";
         try (Connection tenantA = applicationConnection("tenant-a");
                 Statement statement = tenantA.createStatement()) {
             statement.execute("INSERT INTO users (id, tenant_id, keycloak_id, username, email, status, created_at) "
                     + "VALUES ('" + userA + "', 'tenant-a', 'keycloak-a', 'user-a', 'a@example.test', 'ACTIVE', NOW())");
-            statement.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('" + roleA
-                    + "', 'tenant-a', 'role-a')");
-            statement.execute("INSERT INTO user_roles (user_id, role_id) VALUES ('" + userA + "', '" + roleA + "')");
-            statement.execute("INSERT INTO role_permissions (role_id, permission) VALUES ('" + roleA
-                    + "', 'PRODUCT_READ')");
         }
         try (Connection tenantB = applicationConnection("tenant-b");
                 Statement statement = tenantB.createStatement()) {
-            statement.execute("INSERT INTO roles (id, tenant_id, name) VALUES ('" + roleB
-                    + "', 'tenant-b', 'role-b')");
-            assertThat(rowCount(tenantB, "user_roles")).isZero();
-            assertThat(rowCount(tenantB, "role_permissions")).isZero();
-            assertThatThrownBy(() -> statement.execute("INSERT INTO user_roles (user_id, role_id) "
-                    + "VALUES ('" + userA + "', '" + roleB + "')"))
-                    .isInstanceOf(SQLException.class);
+            assertThat(rowCount(tenantB, "users")).isZero();
         }
         try (Connection tenantA = applicationConnection("tenant-a")) {
-            assertThat(rowCount(tenantA, "user_roles")).isEqualTo(1);
-            assertThat(rowCount(tenantA, "role_permissions")).isEqualTo(1);
+            assertThat(rowCount(tenantA, "users")).isEqualTo(1);
         }
     }
 
     @Test
-    void forcesRowLevelSecurityOnIdentityAndAssociationTables() throws SQLException {
+    void forcesRowLevelSecurityOnIdentityUsers() throws SQLException {
         try (Connection connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
                 Statement statement = connection.createStatement();
                 ResultSet result = statement.executeQuery("SELECT relname FROM pg_class WHERE relname IN "
-                        + "('users', 'roles', 'user_roles', 'role_permissions') "
+                        + "('users') "
                         + "AND relrowsecurity AND relforcerowsecurity ORDER BY relname")) {
             List<String> protectedTables = new ArrayList<>();
             while (result.next()) {
                 protectedTables.add(result.getString(1));
             }
-            assertThat(protectedTables).containsExactly("role_permissions", "roles", "user_roles", "users");
+            assertThat(protectedTables).containsExactly("users");
         }
     }
 

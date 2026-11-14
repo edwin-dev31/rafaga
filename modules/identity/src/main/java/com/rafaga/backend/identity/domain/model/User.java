@@ -4,21 +4,14 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -60,13 +53,6 @@ public class User {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "user_roles",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "role_id"))
-    private Set<Role> roles = new LinkedHashSet<>();
-
     protected User() {
     }
 
@@ -82,13 +68,6 @@ public class User {
         this.username = Objects.requireNonNull(username, "username must not be null");
         this.email = Objects.requireNonNull(email, "email must not be null");
         this.lastLoginAt = Objects.requireNonNull(now, "now must not be null");
-    }
-
-    public void assignRole(Role role) {
-        if (!tenantId.equals(role.getTenantId())) {
-            throw new IllegalArgumentException("A role can only be assigned within the same tenant");
-        }
-        roles.add(role);
     }
 
     public UUID getId() {
@@ -123,7 +102,4 @@ public class User {
         return lastLoginAt;
     }
 
-    public Set<Role> getRoles() {
-        return Collections.unmodifiableSet(roles);
-    }
 }

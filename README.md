@@ -88,9 +88,9 @@ docker compose run --rm postgres-role-setup
 
 The default profile is `dev`. The backend listens on port `3117` unless `RAFAGA_SERVER_PORT` is set. The health endpoint is available at `GET /actuator/health`, and the OpenAPI documentation (dev only) is available at `http://localhost:3117/scalar` with the raw spec at `http://localhost:3117/v3/api-docs`.
 
-For a production deployment, set `SPRING_PROFILES_ACTIVE=production`. Production accepts only `/actuator/health` and its Kubernetes probe groups without authentication; the remaining exposed actuator endpoints require the `PLATFORM_ADMIN` role and health responses never include component or detail data.
+For a production deployment, set `SPRING_PROFILES_ACTIVE=production`. Production accepts only `/actuator/health` and its Kubernetes probe groups without authentication; the remaining exposed actuator endpoints require the `SUPER_ADMIN` role and health responses never include component or detail data.
 
-The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `PLATFORM_ADMIN` role, and the `tenant-demo` claim. The development database receives the matching `tenant-demo` tenant through a dev-only Flyway migration.
+The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `SUPER_ADMIN`, `STORE_MANAGER`, and `CUSTOMER` roles, and the `tenant-demo` claim. The development database receives the matching `tenant-demo` tenant through a dev-only Flyway migration.
 
 To authenticate a local client, call the backend rather than Keycloak directly:
 
@@ -220,13 +220,15 @@ Example request:
 
 For `DEDICATED_DB`, provide `databaseConfigId` as a secret reference. Never send or persist raw connection credentials in a request body.
 
-These endpoints require the `PLATFORM_ADMIN` Keycloak role. They bypass tenant resolution because they operate at the platform level.
+These endpoints require the `SUPER_ADMIN` Keycloak role. They bypass tenant resolution because they operate at the platform level.
 
 ## Frontend authentication contract
 
-Static frontends authenticate through the backend, not directly with Keycloak. Public endpoints are `POST /api/public/auth/login` and `POST /api/public/auth/register`. Registration requires `username`, `firstName`, `lastName`, `email`, `password`, and the `X-Registration-Token` header, compared by the backend with the global `RAFAGA_IDENTITY_REGISTRATION_TOKEN` environment secret. The tenant is always resolved from the request domain; registration requests must not include a trusted `tenantId` field.
+Static frontends authenticate through the backend, not directly with Keycloak. Public endpoints are `POST /api/public/auth/login` and `POST /api/public/auth/register`. Registration requires a `SUPER_ADMIN` bearer token plus `username`, `firstName`, `lastName`, `email`, `password`, and the `X-Registration-Token` header, compared by the backend with the global `RAFAGA_IDENTITY_REGISTRATION_TOKEN` environment secret. The tenant is always resolved from the request domain; registration requests must not include a trusted `tenantId` field.
 
 Keycloak is an internal dependency used by the backend for credential validation and user provisioning. Configure `RAFAGA_ALLOWED_ORIGINS` with the exact origins of the static frontends that may call this API.
+
+The complete role matrix, tenant-crossing rules, onboarding flow, and authorization guidance are documented in [docs/role-access-strategy.md](docs/role-access-strategy.md).
 
 ## Database migrations
 

@@ -65,6 +65,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.isAuthenticated()
                     && authentication.getPrincipal() instanceof Jwt jwt
+                    && !isSuperAdmin(authentication)
                     && !tenantId.equals(jwt.getClaimAsString("tenant_id"))) {
                 log.warn("Tenant resolution rejected because the JWT tenant does not match");
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Authenticated tenant does not match request tenant");
@@ -95,5 +96,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
             TenantContext.clear();
             MDC.remove(TenantLoggingInterceptor.TENANT_ID);
         }
+    }
+
+    private boolean isSuperAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 }

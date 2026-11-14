@@ -40,6 +40,8 @@ import tools.jackson.databind.ObjectMapper;
 class AuthenticationEndpointsIntegrationTest {
     private static final String TENANT_ID = "tenant-demo";
     private static final String TENANT_DOMAIN = "demo.rafaga.test";
+    private static final String SECOND_TENANT_ID = "tenant-two";
+    private static final String SECOND_TENANT_DOMAIN = "two.rafaga.test";
     private static final String REGISTRATION_TOKEN = "rafaga_test_registration_token";
     private static final Duration KEYCLOAK_STARTUP_TIMEOUT = Duration.ofSeconds(60);
 
@@ -76,6 +78,15 @@ class AuthenticationEndpointsIntegrationTest {
                 "starter",
                 TenantStatus.ACTIVE,
                 Map.of("catalog", true)));
+        tenantRegistry.register(new TenantConfig(
+                SECOND_TENANT_ID,
+                "Second Store",
+                List.of(SECOND_TENANT_DOMAIN),
+                DeploymentMode.SHARED_DB,
+                null,
+                "starter",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true)));
     }
 
     @Test
@@ -102,12 +113,31 @@ class AuthenticationEndpointsIntegrationTest {
     }
 
     @Test
-    void rejectsRegistrationWithoutTheGlobalRegistrationToken() throws Exception {
+    void rejectsRegistrationWithoutAuthentication() throws Exception {
         mockMvc.perform(post("/api/public/auth/register")
                         .with(request -> {
                             request.setServerName(TENANT_DOMAIN);
                             return request;
                         })
+                        .header("X-Registration-Token", REGISTRATION_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "unregistered-user",
+                                "firstName", "Unregistered",
+                                "lastName", "User",
+                                "email", "unregistered-user@example.test",
+                                "password", "SecurePassword123!"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void rejectsRegistrationWithAnInvalidTokenForTheSuperAdmin() throws Exception {
+        mockMvc.perform(post("/api/public/auth/register")
+                        .with(request -> {
+                            request.setServerName(TENANT_DOMAIN);
+                            return request;
+                        })
+                        .header("Authorization", "Bearer " + accessToken())
                         .header("X-Registration-Token", "invalid-token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
@@ -130,7 +160,7 @@ class AuthenticationEndpointsIntegrationTest {
 
     @Test
     void registersAuthenticatesAndSynchronizesANewUserForTheDomainTenant() throws Exception {
-        String username = "store-owner-" + UUID.randomUUID();
+        String username = "store-manager-" + UUID.randomUUID();
         String email = username + "@example.test";
         String password = "SecurePassword123!";
 
@@ -139,12 +169,13 @@ class AuthenticationEndpointsIntegrationTest {
                             request.setServerName(TENANT_DOMAIN);
                             return request;
                         })
+                        .header("Authorization", "Bearer " + accessToken())
                         .header("X-Registration-Token", REGISTRATION_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "username", username,
                                 "firstName", "Store",
-                                "lastName", "Owner",
+                                "lastName", "Manager",
                                 "email", email,
                                 "password", password))))
                 .andExpect(status().isCreated())
@@ -161,6 +192,34 @@ class AuthenticationEndpointsIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value(username))
                 .andExpect(jsonPath("$.email").value(email));
+    }
+
+    @Test
+    void superAdminCanRegisterAStoreManagerForAnotherTenant() throws Exception {
+        String username = "cross-tenant-manager-" + UUID.randomUUID();
+
+        mockMvc.perform(post("/api/public/auth/register")
+                        .with(request -> {
+                            request.setServerName(SECOND_TENANT_DOMAIN);
+                            return request;
+                        })
+                        .header("Authorization", "Bearer " + accessToken())
+                        .header("X-Registration-Token", REGISTRATION_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "firstName", "Cross",
+                                "lastName", "Tenant",
+                                "email", username + "@example.test",
+                                "password", "SecurePassword123!"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.username").value(username));
+    }
+
+    private String accessToken() throws Exception {
+        JsonNode response = objectMapper.readTree(
+                login("platform-admin", "rafaga_dev_password").getResponse().getContentAsString());
+        return response.path("accessToken").asText();
     }
 
     private MvcResult login(String username, String password) throws Exception {

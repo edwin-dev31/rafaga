@@ -97,7 +97,7 @@ public class KeycloakAdapter implements AuthenticationPort {
             throw new UserAlreadyExistsException();
         }
         String keycloakId = identifierFrom(response.getHeaders().getLocation());
-        assignStoreOwnerRole(adminAccessToken, keycloakId);
+        assignStoreManagerRole(adminAccessToken, keycloakId);
         return new IdentityProfile(keycloakId, registration.username(), registration.email(), tenantId);
     }
 
@@ -147,10 +147,10 @@ public class KeycloakAdapter implements AuthenticationPort {
     }
 
     private String realmRoleUri() {
-        return issuerUri().replace("/realms/", "/admin/realms/") + "/roles/STORE_OWNER";
+        return issuerUri().replace("/realms/", "/admin/realms/") + "/roles/STORE_MANAGER";
     }
 
-    private void assignStoreOwnerRole(String adminAccessToken, String keycloakId) {
+    private void assignStoreManagerRole(String adminAccessToken, String keycloakId) {
         KeycloakRole role = restClient.get()
                 .uri(realmRoleUri())
                 .headers(headers -> headers.setBearerAuth(adminAccessToken))

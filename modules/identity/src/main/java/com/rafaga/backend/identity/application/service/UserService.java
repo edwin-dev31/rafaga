@@ -10,11 +10,8 @@ import com.rafaga.backend.identity.application.port.IdentityProfile;
 import com.rafaga.backend.identity.application.port.IdentityStore;
 import com.rafaga.backend.identity.application.port.UserRegistration;
 import com.rafaga.backend.identity.application.security.RegistrationTokenValidator;
-import com.rafaga.backend.identity.domain.model.Permission;
-import com.rafaga.backend.identity.domain.model.Role;
 import com.rafaga.backend.identity.domain.model.User;
 import java.time.Clock;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
@@ -69,31 +66,6 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public boolean hasPermission(UUID userId, Permission permission) {
-        return findUser(userId).getRoles().stream().anyMatch(role -> role.grants(permission));
-    }
-
-    @Transactional(readOnly = true)
-    public boolean hasCurrentUserPermission(Permission permission) {
-        return findUser(currentKeycloakId()).getRoles().stream().anyMatch(role -> role.grants(permission));
-    }
-
-    @Transactional(readOnly = true)
-    public List<RoleSummary> getUserRoles(UUID userId) {
-        return findUser(userId).getRoles().stream().map(RoleSummary::from).toList();
-    }
-
-    @Transactional
-    public void assignRoleToUser(UUID userId, UUID roleId) {
-        String tenantId = currentTenantId();
-        User user = findUser(tenantId, userId);
-        Role role = identityStore.findRoleById(tenantId, roleId)
-                .orElseThrow(() -> new IdentityResourceNotFoundException("Role", roleId));
-        user.assignRole(role);
-        identityStore.saveUser(user);
-    }
-
-    @Transactional(readOnly = true)
     public UserProfile getUserById(UUID userId) {
         return UserProfile.from(findUser(userId));
     }
@@ -138,10 +110,6 @@ public class UserService {
         String tenantId = currentTenantId();
         return identityStore.findUserByKeycloakId(tenantId, keycloakId)
                 .orElseThrow(() -> new IdentityResourceNotFoundException("User", keycloakId));
-    }
-
-    private String currentKeycloakId() {
-        return currentJwt().getSubject();
     }
 
     private Jwt currentJwt() {

@@ -189,7 +189,9 @@ class InventoryApiIntegrationTest extends TenantIsolationTestBase {
     }
 
     private org.springframework.test.web.servlet.request.RequestPostProcessor jwtFor(String tenantId) {
-        return jwt().jwt(token -> token.claim("tenant_id", tenantId));
+        return jwt().jwt(token -> token.claim("tenant_id", tenantId))
+                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                        "ROLE_STORE_MANAGER"));
     }
 
     private TenantConfig tenant(String id, String host) {

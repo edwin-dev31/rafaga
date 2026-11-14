@@ -112,7 +112,7 @@ class CartApiIntegrationTest {
         String cartId = upsertItem(owner, product, 1);
 
         mvc.perform(get("/api/carts").param("customerId", owner.id().toString())
-                        .header("Host", HOST_A).with(jwtFor(TENANT_A, otherCustomer.keycloakId())))
+                        .header("Host", HOST_A).with(jwtForCustomer(TENANT_A, otherCustomer.keycloakId())))
                 .andExpect(status().isForbidden());
 
         mvc.perform(get("/api/carts/{cartId}", cartId).header("Host", HOST_B)
@@ -199,6 +199,13 @@ class CartApiIntegrationTest {
     }
 
     private org.springframework.test.web.servlet.request.RequestPostProcessor jwtFor(
+            String tenantId, String keycloakId) {
+        return jwt().jwt(token -> token.subject(keycloakId).claim("tenant_id", tenantId))
+                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                        "ROLE_STORE_MANAGER"));
+    }
+
+    private org.springframework.test.web.servlet.request.RequestPostProcessor jwtForCustomer(
             String tenantId, String keycloakId) {
         return jwt().jwt(token -> token.subject(keycloakId).claim("tenant_id", tenantId));
     }

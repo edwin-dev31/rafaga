@@ -3,10 +3,16 @@ package com.rafaga.backend;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
+@EntityScan(basePackages = {"com.rafaga.backend", "org.springframework.modulith.events.jpa"})
+@EnableJpaRepositories(basePackages = "com.rafaga.backend")
+@EnableCaching
 @EnableScheduling
 public class BackendApplication {
 

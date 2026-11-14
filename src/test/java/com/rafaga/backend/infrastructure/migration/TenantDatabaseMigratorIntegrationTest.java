@@ -71,8 +71,8 @@ class TenantDatabaseMigratorIntegrationTest {
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
 
-        assertThat(historyCount(shared)).isEqualTo(10);
-        assertThat(historyCount(dedicated)).isEqualTo(10);
+        assertThat(historyCount(shared)).isEqualTo(11);
+        assertThat(historyCount(dedicated)).isEqualTo(11);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'dedicated-a'"))
                 .isEqualTo(1);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'tenant-demo'"))
@@ -99,8 +99,8 @@ class TenantDatabaseMigratorIntegrationTest {
         new DatabaseMigrationConfiguration()
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
-        assertThat(historyCount(shared)).isEqualTo(10);
-        assertThat(historyCount(dedicated)).isEqualTo(10);
+        assertThat(historyCount(shared)).isEqualTo(11);
+        assertThat(historyCount(dedicated)).isEqualTo(11);
         assertThat(flyway(dedicated).migrate().migrationsExecuted).isZero();
     }
 
@@ -113,9 +113,9 @@ class TenantDatabaseMigratorIntegrationTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("dedicated-a")
                 .hasMessageContaining("module/version")
-                .hasMessageContaining("tenant/V12__broken.sql")
-                .hasMessageContaining("V12__broken.sql");
-        assertThat(historyCount(dedicated)).isEqualTo(10);
+                .hasMessageContaining("tenant/V13__broken.sql")
+                .hasMessageContaining("V13__broken.sql");
+        assertThat(historyCount(dedicated)).isEqualTo(11);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'dedicated-a'"))
                 .isZero();
     }
@@ -140,7 +140,7 @@ class TenantDatabaseMigratorIntegrationTest {
             }
             assertThat(routing.dedicatedDataSources()).containsKey("tenant-dedicated-a");
         }
-        assertThat(historyCount(dedicated)).isEqualTo(10);
+        assertThat(historyCount(dedicated)).isEqualTo(11);
     }
 
     @Test
@@ -161,8 +161,8 @@ class TenantDatabaseMigratorIntegrationTest {
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("tenant/V12__broken.sql")
-                .hasMessageContaining("V12__broken.sql");
+                .hasMessageContaining("tenant/V13__broken.sql")
+                .hasMessageContaining("V13__broken.sql");
     }
 
     @Test
@@ -172,12 +172,12 @@ class TenantDatabaseMigratorIntegrationTest {
                 .locations("classpath:db/migration", "classpath:db/dev-migration")
                 .load();
         withDevSeed.migrate();
-        assertThat(historyCount(shared)).isEqualTo(11);
+        assertThat(historyCount(shared)).isEqualTo(12);
 
         Flyway productionLocations = flyway(shared);
         assertThat(MigrationLocationCompatibility.includePreviouslyAppliedDevSeed(productionLocations)
                 .migrate().migrationsExecuted).isZero();
-        assertThat(historyCount(shared)).isEqualTo(11);
+        assertThat(historyCount(shared)).isEqualTo(12);
     }
 
     private TenantDatabaseMigrator migrator(String... locations) {
