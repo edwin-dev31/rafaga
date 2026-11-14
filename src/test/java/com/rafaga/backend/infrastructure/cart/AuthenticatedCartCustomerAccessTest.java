@@ -6,12 +6,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
-import com.rafaga.backend.identity.application.port.IdentityStore;
-import com.rafaga.backend.identity.domain.model.Permission;
-import com.rafaga.backend.identity.domain.model.Role;
-import com.rafaga.backend.identity.domain.model.User;
+import com.rafaga.backend.identity.application.service.CustomerAccess;
+import com.rafaga.backend.identity.application.service.IdentityAccessService;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +20,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 
 class AuthenticatedCartCustomerAccessTest {
     private static final String TENANT = "tenant-a";
-    private final IdentityStore identities = mock(IdentityStore.class);
+    private final IdentityAccessService identities = mock(IdentityAccessService.class);
     private final AuthenticatedCartCustomerAccess access = new AuthenticatedCartCustomerAccess(identities);
 
     @BeforeEach
@@ -43,19 +40,16 @@ class AuthenticatedCartCustomerAccessTest {
     @Test
     void ownerCanAccessOwnCart() {
         UUID customerId = UUID.randomUUID();
-        User user = mock(User.class);
-        when(user.getId()).thenReturn(customerId);
-        when(identities.findUserByKeycloakId(TENANT, "keycloak-a")).thenReturn(Optional.of(user));
+        when(identities.findCustomerAccess(TENANT, "keycloak-a"))
+                .thenReturn(Optional.of(new CustomerAccess(customerId, false)));
 
         assertThatCode(() -> access.requireAccess(customerId)).doesNotThrowAnyException();
     }
 
     @Test
     void anotherCustomerCannotAccessCart() {
-        User user = mock(User.class);
-        when(user.getId()).thenReturn(UUID.randomUUID());
-        when(user.getRoles()).thenReturn(Set.of());
-        when(identities.findUserByKeycloakId(TENANT, "keycloak-a")).thenReturn(Optional.of(user));
+        when(identities.findCustomerAccess(TENANT, "keycloak-a"))
+                .thenReturn(Optional.of(new CustomerAccess(UUID.randomUUID(), false)));
 
         assertThatThrownBy(() -> access.requireAccess(UUID.randomUUID()))
                 .isInstanceOf(AccessDeniedException.class);
@@ -63,19 +57,15 @@ class AuthenticatedCartCustomerAccessTest {
 
     @Test
     void userManagerCanAccessAnotherCustomersCart() {
-        User user = mock(User.class);
-        Role role = mock(Role.class);
-        when(user.getId()).thenReturn(UUID.randomUUID());
-        when(user.getRoles()).thenReturn(Set.of(role));
-        when(role.grants(Permission.USER_MANAGE)).thenReturn(true);
-        when(identities.findUserByKeycloakId(TENANT, "keycloak-a")).thenReturn(Optional.of(user));
+        when(identities.findCustomerAccess(TENANT, "keycloak-a"))
+                .thenReturn(Optional.of(new CustomerAccess(UUID.randomUUID(), true)));
 
         assertThatCode(() -> access.requireAccess(UUID.randomUUID())).doesNotThrowAnyException();
     }
 
     @Test
     void missingLocalIdentityCannotAccessCart() {
-        when(identities.findUserByKeycloakId(TENANT, "keycloak-a")).thenReturn(Optional.empty());
+        when(identities.findCustomerAccess(TENANT, "keycloak-a")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> access.requireAccess(UUID.randomUUID()))
                 .isInstanceOf(AccessDeniedException.class);

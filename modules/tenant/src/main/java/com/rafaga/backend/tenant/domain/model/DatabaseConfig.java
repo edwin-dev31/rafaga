@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /** Reference to externally managed database credentials; never stores credentials. */
+@org.springframework.modulith.NamedInterface("api")
 public record DatabaseConfig(String secretReference) implements Serializable {
     public DatabaseConfig {
         Objects.requireNonNull(secretReference, "secretReference must not be null");

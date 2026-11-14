@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+@org.springframework.modulith.NamedInterface("api")
 public record TenantConfig(String tenantId, String name, List<String> domains,
                            DeploymentMode deploymentMode, DatabaseConfig databaseConfig,
                            String planId, TenantStatus status, Map<String, Boolean> featureFlags) implements Serializable {

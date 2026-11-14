@@ -4,8 +4,7 @@ import com.rafaga.backend.cart.application.service.CartService;
 import com.rafaga.backend.cart.application.service.CartView;
 import com.rafaga.backend.cart.application.service.storefront.GuestSessionService;
 import com.rafaga.backend.common.application.tenant.TenantContext;
-import com.rafaga.backend.identity.application.port.IdentityStore;
-import com.rafaga.backend.identity.domain.model.User;
+import com.rafaga.backend.identity.application.service.IdentityAccessService;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,10 +34,10 @@ public class StorefrontCustomerController {
 
     private final CartService cartService;
     private final GuestSessionService guestSessionService;
-    private final IdentityStore identityStore;
+    private final IdentityAccessService identityStore;
 
     public StorefrontCustomerController(CartService cartService,
-            GuestSessionService guestSessionService, IdentityStore identityStore) {
+            GuestSessionService guestSessionService, IdentityAccessService identityStore) {
         this.cartService = cartService;
         this.guestSessionService = guestSessionService;
         this.identityStore = identityStore;
@@ -92,8 +91,8 @@ public class StorefrontCustomerController {
             throw new AccessDeniedException("Authenticated tenant does not match request tenant");
         }
         // Resolve the user from identity store
-        User user = identityStore.findUserByKeycloakId(hostTenant, jwt.getSubject())
+        var user = identityStore.findCustomerAccess(hostTenant, jwt.getSubject())
                 .orElseThrow(() -> new AccessDeniedException("Authenticated user is not registered"));
-        return user.getId();
+        return user.userId();
     }
 }
