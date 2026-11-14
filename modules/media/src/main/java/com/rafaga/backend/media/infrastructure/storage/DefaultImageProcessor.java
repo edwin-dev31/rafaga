@@ -2,6 +2,7 @@ package com.rafaga.backend.media.infrastructure.storage;
 
 import com.rafaga.backend.media.domain.service.ImageProcessor;
 import com.rafaga.backend.media.domain.service.ProcessingResult;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
 
+@Slf4j
 @Component
 public class DefaultImageProcessor implements ImageProcessor {
 
@@ -231,9 +233,12 @@ public class DefaultImageProcessor implements ImageProcessor {
             }
 
             javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
-            if (!lossless && param.canWriteCompressed()) {
+            if (param.canWriteCompressed()) {
                 param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
-                param.setCompressionQuality(quality / 100.0f);
+                param.setCompressionType(lossless ? "Lossless" : "Lossy");
+                if (!lossless) {
+                    param.setCompressionQuality(quality / 100.0f);
+                }
             }
 
             javax.imageio.stream.ImageOutputStream ios = javax.imageio.ImageIO.createImageOutputStream(baos);
@@ -245,6 +250,7 @@ public class DefaultImageProcessor implements ImageProcessor {
 
             return baos.toByteArray();
         } catch (Exception e) {
+            log.error("No se pudo codificar la imagen en WebP", e);
             return null;
         }
     }
