@@ -8,12 +8,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
 public interface MediaAssetRepository extends JpaRepository<MediaAssetEntity, UUID> {
 
     List<MediaAssetEntity> findByTenantIdAndStatus(String tenantId, String status);
+
+    List<MediaAssetEntity> findByTenantIdAndIdIn(String tenantId, Collection<UUID> ids);
 
     List<MediaAssetEntity> findByStatusAndUploadExpiresAtBefore(String status, Instant threshold);
 

@@ -15,9 +15,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
 public class MediaJpaAdapter implements MediaRepository {
@@ -208,6 +212,31 @@ public class MediaJpaAdapter implements MediaRepository {
         return productImageRepo.findByTenantIdAndProductIdOrderByPositionAsc(tenantId, productId).stream()
             .map(this::toProductImageDomain)
             .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductImage> findByProductIdsOrderByProductIdAndPosition(
+            Collection<UUID> productIds, String tenantId) {
+        if (productIds.isEmpty()) {
+            return List.of();
+        }
+        return productImageRepo
+                .findByTenantIdAndProductIdInOrderByProductIdAscPositionAsc(tenantId, productIds)
+                .stream()
+                .map(this::toProductImageDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, MediaAsset> findByIds(Collection<UUID> ids, String tenantId) {
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return assetRepo.findByTenantIdAndIdIn(tenantId, ids).stream()
+                .map(this::toDomain)
+                .collect(Collectors.toMap(MediaAsset::getId, Function.identity()));
     }
 
     @Override

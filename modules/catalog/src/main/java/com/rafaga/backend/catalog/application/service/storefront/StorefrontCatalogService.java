@@ -2,6 +2,7 @@ package com.rafaga.backend.catalog.application.service.storefront;
 
 import com.rafaga.backend.catalog.application.exception.CatalogNotFoundException;
 import com.rafaga.backend.catalog.application.port.CatalogStore;
+import com.rafaga.backend.catalog.application.port.StorefrontProductImageLookup;
 import com.rafaga.backend.catalog.application.service.CategoryNode;
 import com.rafaga.backend.catalog.application.service.CategoryService;
 import com.rafaga.backend.catalog.domain.model.Category;
@@ -9,6 +10,7 @@ import com.rafaga.backend.catalog.domain.model.Product;
 import com.rafaga.backend.catalog.domain.model.VariantStatus;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,17 +26,27 @@ public class StorefrontCatalogService {
 
     private final CatalogStore store;
     private final CategoryService categoryService;
+    private final StorefrontProductImageLookup productImageLookup;
 
-    public StorefrontCatalogService(CatalogStore store, CategoryService categoryService) {
+    public StorefrontCatalogService(
+            CatalogStore store,
+            CategoryService categoryService,
+            StorefrontProductImageLookup productImageLookup) {
         this.store = store;
         this.categoryService = categoryService;
+        this.productImageLookup = productImageLookup;
     }
 
     @Transactional(readOnly = true)
     public Page<StorefrontProductResponse> listProducts(Pageable pageable) {
         String tenantId = TenantContext.getCurrentTenantId();
-        return store.findActiveProducts(tenantId, pageable)
-                .map(this::toStorefrontProduct);
+        Page<Product> products = store.findActiveProducts(tenantId, pageable);
+        Map<UUID, List<StorefrontProductImageLookup.Image>> imagesByProduct =
+                productImageLookup.findByProductIds(products.getContent().stream()
+                        .map(Product::getId)
+                        .toList());
+        return products.map(product -> toStorefrontProduct(
+                product, imagesByProduct.getOrDefault(product.getId(), List.of())));
     }
 
     @Transactional(readOnly = true)
@@ -42,7 +54,10 @@ public class StorefrontCatalogService {
         String tenantId = TenantContext.getCurrentTenantId();
         Product product = store.findActiveProduct(productId, tenantId)
                 .orElseThrow(() -> new CatalogNotFoundException("Product", productId));
-        return toStorefrontProduct(product);
+        List<StorefrontProductImageLookup.Image> images = productImageLookup
+                .findByProductIds(List.of(productId))
+                .getOrDefault(productId, List.of());
+        return toStorefrontProduct(product, images);
     }
 
     @Transactional(readOnly = true)
@@ -64,7 +79,8 @@ public class StorefrontCatalogService {
     // Mappings
     // -------------------------------------------------------------------------
 
-    private StorefrontProductResponse toStorefrontProduct(Product product) {
+    private StorefrontProductResponse toStorefrontProduct(
+            Product product, List<StorefrontProductImageLookup.Image> images) {
         return new StorefrontProductResponse(
                 product.getId(),
                 product.getSku(),
@@ -83,6 +99,11 @@ public class StorefrontCatalogService {
                                 variant.getName(),
                                 product.getBasePrice().add(variant.getPriceAdjustment()),
                                 variant.getStatus() == VariantStatus.ACTIVE))
+                        .toList(),
+                images.stream()
+                        .map(image -> new StorefrontProductResponse.ImageSummary(
+                                image.url(), image.contentType(), image.width(), image.height(),
+                                image.position(), image.primary()))
                         .toList());
     }
 

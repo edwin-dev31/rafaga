@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.UUID;
 
 public interface ProductImageRepository extends JpaRepository<ProductImageEntity, UUID> {
@@ -13,6 +14,9 @@ public interface ProductImageRepository extends JpaRepository<ProductImageEntity
     List<ProductImageEntity> findByTenantIdAndProductId(String tenantId, UUID productId);
 
     List<ProductImageEntity> findByTenantIdAndProductIdOrderByPositionAsc(String tenantId, UUID productId);
+
+    List<ProductImageEntity> findByTenantIdAndProductIdInOrderByProductIdAscPositionAsc(
+            String tenantId, Collection<UUID> productIds);
 
     boolean existsByTenantIdAndMediaAssetId(String tenantId, UUID mediaAssetId);
 

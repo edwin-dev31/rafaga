@@ -16,7 +16,8 @@ public record StorefrontProductResponse(
         BigDecimal price,
         boolean available,
         List<CategorySummary> categories,
-        List<VariantSummary> variants) {
+        List<VariantSummary> variants,
+        List<ImageSummary> images) {
 
     public record CategorySummary(String name, String slug) { }
 
@@ -26,4 +27,13 @@ public record StorefrontProductResponse(
             String name,
             BigDecimal price,
             boolean available) { }
+
+    /** Public image data needed by the storefront; no media or tenant IDs leak. */
+    public record ImageSummary(
+            String url,
+            String contentType,
+            Integer width,
+            Integer height,
+            int position,
+            boolean primary) { }
 }

@@ -33,6 +33,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -590,5 +591,44 @@ class MediaServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).position()).isEqualTo(0);
         assertThat(result.get(0).isPrimary()).isTrue();
+    }
+
+    @Test
+    void listProductImagesByProductIds_returnsAllImagesGroupedByProduct() {
+        UUID firstProductId = UUID.randomUUID();
+        UUID secondProductId = UUID.randomUUID();
+        UUID firstAssetId = UUID.randomUUID();
+        UUID secondAssetId = UUID.randomUUID();
+        MediaAsset firstAsset = readyAsset(firstAssetId, "first/final.webp", 800, 600);
+        MediaAsset secondAsset = readyAsset(secondAssetId, "second/final.webp", 640, 480);
+        ProductImage firstImage = new ProductImage(UUID.randomUUID(), TENANT_ID, firstProductId,
+                firstAssetId, 0, true, NOW);
+        ProductImage secondImage = new ProductImage(UUID.randomUUID(), TENANT_ID, secondProductId,
+                secondAssetId, 0, true, NOW);
+
+        when(repository.findByProductIdsOrderByProductIdAndPosition(
+                List.of(firstProductId, secondProductId), TENANT_ID))
+                .thenReturn(List.of(firstImage, secondImage));
+        when(repository.findByIds(any(), eq(TENANT_ID))).thenReturn(Map.of(
+                firstAssetId, firstAsset,
+                secondAssetId, secondAsset));
+
+        Map<UUID, List<ProductImageDto>> result = mediaService.listProductImagesByProductIds(
+                List.of(firstProductId, secondProductId));
+
+        assertThat(result).containsKeys(firstProductId, secondProductId);
+        assertThat(result.get(firstProductId)).singleElement()
+                .extracting(ProductImageDto::mediaAssetId)
+                .isEqualTo(firstAssetId);
+        assertThat(result.get(secondProductId)).singleElement()
+                .extracting(ProductImageDto::mediaAssetId)
+                .isEqualTo(secondAssetId);
+    }
+
+    private MediaAsset readyAsset(UUID assetId, String objectKey, int width, int height) {
+        MediaAsset asset = new MediaAsset(assetId, TENANT_ID, "upload/key", NOW.plus(Duration.ofMinutes(5)),
+                5_242_880, "image/jpeg", AssetType.PRODUCT, NOW);
+        asset.markReady(objectKey, width, height, 5000, NOW);
+        return asset;
     }
 }

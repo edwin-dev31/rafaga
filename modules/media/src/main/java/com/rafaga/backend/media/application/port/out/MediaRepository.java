@@ -7,7 +7,9 @@ import com.rafaga.backend.media.domain.model.ProductImage;
 import com.rafaga.backend.media.domain.model.TenantMediaQuota;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,6 +30,9 @@ public interface MediaRepository {
     void deleteProductImage(UUID id, String tenantId);
     boolean existsByMediaAssetId(UUID mediaAssetId, String tenantId);
     List<ProductImage> findByProductIdOrderByPosition(UUID productId, String tenantId);
+    List<ProductImage> findByProductIdsOrderByProductIdAndPosition(
+            Collection<UUID> productIds, String tenantId);
+    Map<UUID, MediaAsset> findByIds(Collection<UUID> ids, String tenantId);
     void updateProductImagePositions(List<ProductImage> images);
     Optional<MediaAsset> findActiveBranding(String tenantId, AssetType assetType);
     /**

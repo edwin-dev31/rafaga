@@ -422,6 +422,36 @@ public class MediaService {
         }).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
+    /**
+     * Loads public image data for a page of products in two repository queries.
+     * The result preserves the image position within each product.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, List<ProductImageDto>> listProductImagesByProductIds(
+            Collection<UUID> productIds) {
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        List<ProductImage> images = repository
+                .findByProductIdsOrderByProductIdAndPosition(productIds, tenantId);
+        Map<UUID, MediaAsset> assetsById = repository.findByIds(images.stream()
+                .map(ProductImage::getMediaAssetId)
+                .collect(Collectors.toSet()), tenantId);
+
+        Map<UUID, List<ProductImageDto>> imagesByProduct = new LinkedHashMap<>();
+        for (ProductImage image : images) {
+            MediaAsset asset = assetsById.get(image.getMediaAssetId());
+            if (asset == null || asset.getStatus() != AssetStatus.READY
+                    || asset.getObjectKey() == null) {
+                continue;
+            }
+            imagesByProduct.computeIfAbsent(image.getProductId(), ignored -> new ArrayList<>())
+                    .add(toProductImageDto(image, asset));
+        }
+        return imagesByProduct;
+    }
+
     // ---- Reorder Product Images ----
 
     @Transactional
