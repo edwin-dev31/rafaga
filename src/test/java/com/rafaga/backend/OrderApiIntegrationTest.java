@@ -38,7 +38,7 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class OrderApiIntegrationTest {
+class OrderApiIntegrationTest extends TenantIsolationTestBase {
     private static final String TENANT_A = "orders-test-a";
     private static final String TENANT_B = "orders-test-b";
     private static final String HOST_A = "a.orders.test";

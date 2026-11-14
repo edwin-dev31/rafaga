@@ -135,6 +135,18 @@ To run only the tenant module tests:
 .\gradlew.bat :modules:tenant:test
 ```
 
+### Mandatory tenant-isolation checks
+
+`CatalogApiIntegrationTest`, `InventoryApiIntegrationTest`, and `OrderApiIntegrationTest` are mandatory PostgreSQL-backed checks. They verify that tenant B cannot read or mutate tenant A data through the API and that the JPA query layer returns no cross-tenant records. New business modules that persist tenant data must add an equivalent integration test and include it in `.github/workflows/tenant-isolation.yml`.
+
+Run the same gate locally after starting `compose.test.yaml`:
+
+```powershell
+.\gradlew.bat :test --tests com.rafaga.backend.CatalogApiIntegrationTest `
+  --tests com.rafaga.backend.InventoryApiIntegrationTest `
+  --tests com.rafaga.backend.OrderApiIntegrationTest
+```
+
 ## Configuration
 
 Local values can be overridden with environment variables.
