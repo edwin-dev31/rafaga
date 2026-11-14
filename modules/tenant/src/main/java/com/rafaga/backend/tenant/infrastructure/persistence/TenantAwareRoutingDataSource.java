@@ -66,13 +66,33 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
         }
         String tenantId = TenantContext.getCurrentTenantId();
         TenantConfig tenant = tenantConfiguration(tenantId);
-        return dedicatedDataSources.computeIfAbsent((String) lookupKey, ignored -> {
+        return dedicatedDataSource(tenant);
+    }
+
+    /**
+     * Returns the pool for a dedicated tenant, creating it lazily when the tenant is first checked.
+     * This is used by infrastructure health checks and never exposes its credentials.
+     */
+    public HikariDataSource dedicatedDataSource(String tenantId) {
+        TenantConfig tenant = tenantConfiguration(tenantId);
+        if (tenant.deploymentMode() != DeploymentMode.DEDICATED_DB) {
+            throw new IllegalArgumentException("Tenant does not use a dedicated database");
+        }
+        return dedicatedDataSource(tenant);
+    }
+
+    public HikariDataSource sharedDataSource() {
+        return sharedDataSource;
+    }
+
+    private HikariDataSource dedicatedDataSource(TenantConfig tenant) {
+        return dedicatedDataSources.computeIfAbsent(dedicatedKey(tenant.tenantId()), ignored -> {
             HikariDataSource dataSource = createDedicatedDataSource(tenant);
             Map<Object, Object> targetDataSources = new HashMap<>();
             targetDataSources.put(SYSTEM_KEY, sharedDataSource);
             targetDataSources.put(SHARED_KEY, sharedDataSource);
             targetDataSources.putAll(dedicatedDataSources);
-            targetDataSources.put(lookupKey, dataSource);
+            targetDataSources.put(dedicatedKey(tenant.tenantId()), dataSource);
             setTargetDataSources(targetDataSources);
             afterPropertiesSet();
             return dataSource;

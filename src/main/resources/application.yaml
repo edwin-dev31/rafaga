@@ -9,6 +9,29 @@ spring:
 server:
   port: ${RAFAGA_SERVER_PORT:3117}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-components: when_authorized
+      show-details: when_authorized
+      status:
+        order: down,out-of-service,degraded,unknown,up
+        http-mapping:
+          down: 503
+          out-of-service: 503
+          degraded: 200
+  health:
+    db:
+      enabled: false
+    redis:
+      enabled: false
+
 springdoc:
   api-docs:
     enabled: false

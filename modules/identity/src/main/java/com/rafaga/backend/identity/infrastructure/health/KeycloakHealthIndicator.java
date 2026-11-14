@@ -1,0 +1,39 @@
+package com.rafaga.backend.identity.infrastructure.health;
+
+import com.rafaga.backend.identity.infrastructure.keycloak.KeycloakProperties;
+import org.springframework.boot.health.contributor.Health;
+import org.springframework.boot.health.contributor.HealthIndicator;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+
+@Component
+public class KeycloakHealthIndicator implements HealthIndicator {
+    private final KeycloakProperties properties;
+    private final RestClient restClient;
+
+    public KeycloakHealthIndicator(KeycloakProperties properties) {
+        this.properties = properties;
+        this.restClient = RestClient.create();
+    }
+
+    @Override
+    public Health health() {
+        String issuerUri = properties.getIssuerUri();
+        if (issuerUri == null || issuerUri.isBlank()) {
+            return Health.down().withDetail("reason", "Keycloak issuer URI is not configured").build();
+        }
+        try {
+            ResponseEntity<Void> response = restClient.get()
+                    .uri(issuerUri.replaceAll("/+$", "") + "/protocol/openid-connect/certs")
+                    .retrieve()
+                    .toBodilessEntity();
+            if (response.getStatusCode().is2xxSuccessful()) {
+                return Health.up().withDetail("issuer", issuerUri).build();
+            }
+            return Health.down().withDetail("status", response.getStatusCode().value()).build();
+        } catch (Exception exception) {
+            return Health.down(exception).withDetail("issuer", issuerUri).build();
+        }
+    }
+}

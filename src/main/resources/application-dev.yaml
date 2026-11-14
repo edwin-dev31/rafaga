@@ -36,6 +36,12 @@ spring:
         jdbc:
           time_zone: UTC
 
+management:
+  endpoint:
+    health:
+      show-components: always
+      show-details: always
+
 rafaga:
   tenant:
     dev-default-tenant: tenant-demo
