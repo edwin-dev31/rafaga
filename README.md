@@ -64,6 +64,7 @@ application/
 - [API guide](docs/api.md)
 - [Deployment guide](docs/deployment-guide.md)
 - [Developer onboarding](docs/developer-onboarding.md)
+- [Cloudflare r2 and cdn setup](docs/cloudflare-r2-cdn-setup.md)
 
 ## Requirements
 
