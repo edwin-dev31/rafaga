@@ -35,7 +35,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/api/public/**", "/api/storefront/**").permitAll()
+                        .requestMatchers("/actuator/health/**", "/api/public/**", "/api/storefront/**").permitAll()
+                        .requestMatchers("/actuator/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("PLATFORM_ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())

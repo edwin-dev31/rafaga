@@ -27,6 +27,15 @@ spring:
     type: redis
     redis:
       time-to-live: 5m
+  data:
+    redis:
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:true}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_TIMEOUT:2s}
+      cluster:
+        nodes: ${REDIS_CLUSTER_NODES}
+        max-redirects: ${REDIS_CLUSTER_MAX_REDIRECTS:3}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -35,6 +44,17 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+
+management:
+  endpoint:
+    health:
+      show-components: never
+      show-details: never
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: true
 
 rafaga:
   tenant:

@@ -22,4 +22,10 @@ class ActuatorHealthEndpointTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
     }
+
+    @Test
+    void requiresPlatformAdministratorAuthenticationForNonHealthActuatorEndpoints() throws Exception {
+        mockMvc.perform(get("/actuator/info"))
+                .andExpect(status().isUnauthorized());
+    }
 }

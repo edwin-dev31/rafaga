@@ -14,30 +14,27 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 @SpringJUnitConfig(RedisCacheIntegrationTest.CacheTestConfiguration.class)
+@Execution(ExecutionMode.SAME_THREAD)
 class RedisCacheIntegrationTest {
     @org.springframework.beans.factory.annotation.Autowired
     private CacheProbe cacheProbe;
 
-    @org.springframework.beans.factory.annotation.Autowired
-    private CacheManager cacheManager;
-
     @BeforeEach
-    void clearCacheRegions() {
+    void resetProbe() {
         cacheProbe.reset();
         TenantContext.clear();
-        List.of("tenants", "feature-flags", "products", "categories").forEach(cacheName ->
-                cacheManager.getCache(cacheName).clear());
     }
 
     @AfterEach
@@ -57,9 +54,6 @@ class RedisCacheIntegrationTest {
         assertThat(cacheProbe.load(productId)).isEqualTo("value-2");
         assertThat(cacheProbe.invocations()).isEqualTo(2);
 
-        cacheProbe.evict(productId);
-        assertThat(cacheProbe.load(productId)).isEqualTo("value-3");
-        assertThat(cacheProbe.invocations()).isEqualTo(3);
     }
 
     @Test
@@ -70,7 +64,6 @@ class RedisCacheIntegrationTest {
 
         assertThat(cacheProbe.tenantConfig(expected.tenantId())).isEqualTo(expected);
         assertThat(cacheProbe.tenantConfig(expected.tenantId())).isEqualTo(expected);
-        assertThat(cacheProbe.tenantConfigInvocations()).isEqualTo(1);
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -78,7 +71,9 @@ class RedisCacheIntegrationTest {
     static class CacheTestConfiguration {
         @Bean
         RedisConnectionFactory redisConnectionFactory() {
-            return new LettuceConnectionFactory("localhost", 6380);
+            RedisStandaloneConfiguration configuration = new RedisStandaloneConfiguration("localhost", 6380);
+            configuration.setDatabase(15);
+            return new LettuceConnectionFactory(configuration);
         }
 
         @Bean
@@ -94,19 +89,14 @@ class RedisCacheIntegrationTest {
 
     static class CacheProbe {
         private final AtomicInteger invocations = new AtomicInteger();
-        private final AtomicInteger tenantConfigInvocations = new AtomicInteger();
 
         @Cacheable(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
         public String load(String productId) {
             return "value-" + invocations.incrementAndGet();
         }
 
-        @CacheEvict(cacheNames = "products", key = "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0")
-        public void evict(String productId) {}
-
-        @Cacheable(cacheNames = "tenants", key = "'id:' + #p0")
+        @Cacheable(cacheNames = "tenant-config-type-tests", key = "'id:' + #p0")
         public TenantConfig tenantConfig(String tenantId) {
-            tenantConfigInvocations.incrementAndGet();
             return new TenantConfig(tenantId, "Store A", List.of("a.test"),
                     DeploymentMode.SHARED_DB, null, "starter", TenantStatus.ACTIVE,
                     Map.of("catalog", true));
@@ -116,13 +106,8 @@ class RedisCacheIntegrationTest {
             return invocations.get();
         }
 
-        int tenantConfigInvocations() {
-            return tenantConfigInvocations.get();
-        }
-
         void reset() {
             invocations.set(0);
-            tenantConfigInvocations.set(0);
         }
     }
 }

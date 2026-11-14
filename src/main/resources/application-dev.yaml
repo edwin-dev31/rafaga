@@ -27,6 +27,12 @@ spring:
     type: redis
     redis:
       time-to-live: 5m
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
+      timeout: ${REDIS_TIMEOUT:2s}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -66,3 +72,5 @@ scalar:
 logging:
   level:
     com.rafaga.backend: INFO
+    com.rafaga.backend.tenant: DEBUG
+    org.springframework.modulith: DEBUG

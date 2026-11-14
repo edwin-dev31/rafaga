@@ -18,6 +18,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,10 +31,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class TenantAwareRoutingDataSourceIntegrationTest {
     @Container
-    static final PostgreSQLContainer SHARED_POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
+    static final PostgreSQLContainer SHARED_POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
+            .withStartupTimeout(Duration.ofMinutes(2));
 
     @Container
-    static final PostgreSQLContainer DEDICATED_POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
+    static final PostgreSQLContainer DEDICATED_POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
+            .withStartupTimeout(Duration.ofMinutes(2));
 
     @AfterEach
     void clearContext() {

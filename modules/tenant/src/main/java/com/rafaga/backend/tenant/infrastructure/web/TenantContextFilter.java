@@ -43,7 +43,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
                 || path.equals("/scalar") || path.startsWith("/scalar/")
                 || path.equals("/v3/api-docs") || path.startsWith("/v3/api-docs/")
                 || path.equals("/favicon.ico") || path.equals("/favicon.svg")
-                || path.equals("/actuator/health")
+                || path.startsWith("/actuator/health")
                 || (path.startsWith("/api/public/") && !path.startsWith("/api/public/auth/"))
                 || path.startsWith("/api/admin/");
     }

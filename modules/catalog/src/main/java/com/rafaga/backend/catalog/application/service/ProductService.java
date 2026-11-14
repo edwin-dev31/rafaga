@@ -65,7 +65,7 @@ public class ProductService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "products", key = "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0")
+    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
     public ProductView updateProduct(UUID productId, UpdateProduct command) {
         String tenantId = TenantContext.getCurrentTenantId();
         Product product = product(productId, tenantId);
@@ -99,7 +99,7 @@ public class ProductService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "products", key = "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0")
+    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
     public void deleteProduct(UUID productId) {
         String tenantId = TenantContext.getCurrentTenantId();
         store.deleteProduct(product(productId, tenantId));

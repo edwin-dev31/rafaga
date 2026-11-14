@@ -88,6 +88,8 @@ docker compose run --rm postgres-role-setup
 
 The default profile is `dev`. The backend listens on port `3117` unless `RAFAGA_SERVER_PORT` is set. The health endpoint is available at `GET /actuator/health`, and the OpenAPI documentation (dev only) is available at `http://localhost:3117/scalar` with the raw spec at `http://localhost:3117/v3/api-docs`.
 
+For a production deployment, set `SPRING_PROFILES_ACTIVE=production`. Production accepts only `/actuator/health` and its Kubernetes probe groups without authentication; the remaining exposed actuator endpoints require the `PLATFORM_ADMIN` role and health responses never include component or detail data.
+
 The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `PLATFORM_ADMIN` role, and the `tenant-demo` claim. The development database receives the matching `tenant-demo` tenant through a dev-only Flyway migration.
 
 To authenticate a local client, call the backend rather than Keycloak directly:
@@ -163,6 +165,11 @@ Local values can be overridden with environment variables.
 | `TEST_POSTGRES_USER` / `TEST_POSTGRES_PASSWORD` | `rafaga_test` / `rafaga_test` | Test database administrator used by Flyway and role setup. |
 | `TEST_REDIS_HOST` | `localhost` | Test Redis host. |
 | `TEST_REDIS_PORT` | `6380` | Test Redis port. |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Development Redis host and port. |
+| `REDIS_CONNECT_TIMEOUT` / `REDIS_TIMEOUT` | `2s` / `2s` | Redis connection and command timeouts. |
+| `REDIS_CLUSTER_NODES` | — | Required production comma-separated `host:port` list for the Redis cluster. |
+| `REDIS_CLUSTER_MAX_REDIRECTS` | `3` | Maximum redirects followed when Redis Cluster moves a slot. |
+| `REDIS_SSL_ENABLED` | `true` | Enables TLS for the production Redis cluster; set according to the managed Redis service. |
 | `KEYCLOAK_JWK_SET_URI` | Local Keycloak JWK endpoint | JWT public keys used by the resource server. |
 | `KEYCLOAK_ISSUER_URI` | Local Keycloak realm URL | Keycloak issuer and OIDC endpoints. |
 | `KEYCLOAK_CLIENT_ID` | — | Confidential client ID used only for direct Keycloak authentication. |
@@ -173,6 +180,8 @@ Local values can be overridden with environment variables.
 | `RAFAGA_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated static frontend origins accepted by CORS. |
 | `KEYCLOAK_ADMIN_USERNAME` | `admin` | Local Keycloak bootstrap administrator. |
 | `KEYCLOAK_ADMIN_PASSWORD` | — | Local Keycloak bootstrap administrator password. |
+
+The `dev` profile targets local PostgreSQL, Redis and Keycloak, enables debug logs for tenant resolution and Spring Modulith, and enables the API documentation UI. The Gradle `test` profile uses the isolated PostgreSQL/Redis compose stack; some datasource-routing tests additionally start their own Testcontainers database. The `production` profile requires all database, Keycloak, CORS, registration-token, and Redis cluster variables above. It uses the restricted shared-database role for application traffic, validates Flyway migrations, uses a 50-connection Hikari pool, and never enables internal tenant-header resolution.
 
 Dedicated-database credentials are never stored in `TenantConfig`. `TenantDatabaseCredentialsProvider` is the port used to integrate the appropriate secrets manager.
 The `postgres-role-setup` services create or update the restricted application role and grant table access after PostgreSQL starts. Run them again after changing database credentials. PostgreSQL row-level security is enforced for application queries; Flyway uses the separate administrator connection.
