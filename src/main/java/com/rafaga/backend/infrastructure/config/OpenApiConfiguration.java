@@ -5,6 +5,8 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import java.util.List;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,5 +25,23 @@ public class OpenApiConfiguration {
                         .scheme("bearer")
                         .bearerFormat("JWT")))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME));
+    }
+
+    @Bean
+    OpenApiCustomizer publicEndpointSecurityCustomizer() {
+        return openApi -> {
+            if (openApi.getPaths() == null) {
+                return;
+            }
+            openApi.getPaths().forEach((path, pathItem) -> {
+                if (path.startsWith("/api/storefront/")) {
+                    pathItem.readOperations().forEach(operation -> operation.setSecurity(List.of()));
+                }
+            });
+            var login = openApi.getPaths().get("/api/public/auth/login");
+            if (login != null && login.getPost() != null) {
+                login.getPost().setSecurity(List.of());
+            }
+        };
     }
 }

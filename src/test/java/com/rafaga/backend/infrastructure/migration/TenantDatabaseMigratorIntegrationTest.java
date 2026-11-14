@@ -172,12 +172,12 @@ class TenantDatabaseMigratorIntegrationTest {
                 .locations("classpath:db/migration", "classpath:db/dev-migration")
                 .load();
         withDevSeed.migrate();
-        assertThat(historyCount(shared)).isEqualTo(12);
+        assertThat(historyCount(shared)).isEqualTo(13);
 
         Flyway productionLocations = flyway(shared);
         assertThat(MigrationLocationCompatibility.includePreviouslyAppliedDevSeed(productionLocations)
                 .migrate().migrationsExecuted).isZero();
-        assertThat(historyCount(shared)).isEqualTo(12);
+        assertThat(historyCount(shared)).isEqualTo(13);
     }
 
     private TenantDatabaseMigrator migrator(String... locations) {

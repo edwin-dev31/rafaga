@@ -3,6 +3,7 @@ package com.rafaga.backend.inventory.infrastructure.web;
 import com.rafaga.backend.inventory.application.service.MovementView;
 import com.rafaga.backend.inventory.application.service.StockLevelView;
 import com.rafaga.backend.inventory.application.service.StockService;
+import com.rafaga.backend.tenant.application.RequiresFeature;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/stock")
+@RequiresFeature("inventory")
 public class StockController {
     private final StockService stock;
 

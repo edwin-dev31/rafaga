@@ -49,6 +49,9 @@ abstract class TenantIsolationTestBase {
 
     protected TenantConfig isolationTenant(String tenantId, String host) {
         return new TenantConfig(tenantId, tenantId, List.of(host), DeploymentMode.SHARED_DB,
-                null, "test", TenantStatus.ACTIVE, Map.of("test", true));
+                null, "test", TenantStatus.ACTIVE, Map.of(
+                        "catalog", true,
+                        "inventory", true,
+                        "orders", true));
     }
 }

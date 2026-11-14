@@ -58,6 +58,13 @@ application/
 | `inventory` | Stock levels, movements, and reservations. |
 | `orders` | Orders and their lifecycle. |
 
+## Guides
+
+- [Role and access strategy](docs/role-access-strategy.md)
+- [API guide](docs/api.md)
+- [Deployment guide](docs/deployment-guide.md)
+- [Developer onboarding](docs/developer-onboarding.md)
+
 ## Requirements
 
 - JDK 25
@@ -90,7 +97,7 @@ The default profile is `dev`. The backend listens on port `3117` unless `RAFAGA_
 
 For a production deployment, set `SPRING_PROFILES_ACTIVE=production`. Production accepts only `/actuator/health` and its Kubernetes probe groups without authentication; the remaining exposed actuator endpoints require the `SUPER_ADMIN` role and health responses never include component or detail data.
 
-The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `SUPER_ADMIN`, `STORE_MANAGER`, and `CUSTOMER` roles, and the `tenant-demo` claim. The development database receives the matching `tenant-demo` tenant through a dev-only Flyway migration.
+The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `SUPER_ADMIN`, `STORE_MANAGER`, and `CUSTOMER` roles, and the `tenant-demo` claim. Development-only Flyway migrations create the matching tenant, its feature flags, and a sample active catalog item (`DEMO-TEE`). Keycloak remains the sole source of roles; the local user projection is populated when a user authenticates.
 
 To authenticate a local client, call the backend rather than Keycloak directly:
 

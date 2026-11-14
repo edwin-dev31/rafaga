@@ -5,6 +5,7 @@ import com.rafaga.backend.catalog.application.command.UpdateProduct;
 import com.rafaga.backend.catalog.application.service.ProductService;
 import com.rafaga.backend.catalog.application.service.ProductView;
 import com.rafaga.backend.catalog.domain.model.ProductStatus;
+import com.rafaga.backend.tenant.application.RequiresFeature;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/products")
+@RequiresFeature("catalog")
 public class ProductController {
     private final ProductService products;
 

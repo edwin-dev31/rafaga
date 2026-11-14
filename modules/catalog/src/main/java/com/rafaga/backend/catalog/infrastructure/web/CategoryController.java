@@ -3,6 +3,7 @@ package com.rafaga.backend.catalog.infrastructure.web;
 import com.rafaga.backend.catalog.application.service.CategoryNode;
 import com.rafaga.backend.catalog.application.service.CategoryService;
 import com.rafaga.backend.catalog.application.service.CategoryView;
+import com.rafaga.backend.tenant.application.RequiresFeature;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/categories")
+@RequiresFeature("catalog")
 public class CategoryController {
     private final CategoryService categories;
 

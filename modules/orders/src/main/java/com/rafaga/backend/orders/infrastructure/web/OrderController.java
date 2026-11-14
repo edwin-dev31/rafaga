@@ -4,6 +4,7 @@ import com.rafaga.backend.orders.application.command.CreateOrder;
 import com.rafaga.backend.orders.application.service.OrderService;
 import com.rafaga.backend.orders.application.service.OrderView;
 import com.rafaga.backend.orders.domain.model.OrderStatus;
+import com.rafaga.backend.tenant.application.RequiresFeature;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/orders")
+@RequiresFeature("orders")
 public class OrderController {
     private final OrderService orders;
 

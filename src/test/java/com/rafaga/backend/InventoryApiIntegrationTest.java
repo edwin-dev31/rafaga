@@ -196,6 +196,8 @@ class InventoryApiIntegrationTest extends TenantIsolationTestBase {
 
     private TenantConfig tenant(String id, String host) {
         return new TenantConfig(id, id, List.of(host), DeploymentMode.SHARED_DB,
-                null, "test", TenantStatus.ACTIVE, Map.of("inventory", true));
+                null, "test", TenantStatus.ACTIVE, Map.of(
+                        "catalog", true,
+                        "inventory", true));
     }
 }
