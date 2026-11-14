@@ -87,7 +87,10 @@ public class UserService {
 
     private UserProfile synchronizeProfile(IdentityProfile profile) {
         String tenantId = currentTenantId();
-        verifyTenant(profile.tenantId(), tenantId);
+        String profileTenantId = profile.tenantId();
+        if (profileTenantId != null && !tenantId.equals(profileTenantId)) {
+            throw new CrossTenantAccessException();
+        }
         User user = identityStore.findUserByKeycloakId(tenantId, profile.keycloakId()).orElse(null);
         if (user == null) {
             user = new User(tenantId, profile.keycloakId(), profile.username(), profile.email(), clock.instant());
@@ -124,9 +127,4 @@ public class UserService {
         return TenantContext.getCurrentTenantId();
     }
 
-    private void verifyTenant(String profileTenantId, String currentTenantId) {
-        if (!currentTenantId.equals(profileTenantId)) {
-            throw new CrossTenantAccessException();
-        }
-    }
 }

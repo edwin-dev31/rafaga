@@ -23,6 +23,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 @Component
 public class KeycloakAdapter implements AuthenticationPort {
@@ -42,6 +43,15 @@ public class KeycloakAdapter implements AuthenticationPort {
             return requestUserTokens(username, password);
         } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.BadRequest exception) {
             throw new InvalidCredentialsException();
+        } catch (ResourceAccessException exception) {
+            throw new IllegalStateException("Unable to connect to Keycloak. Please try again later.", exception);
+        } catch (HttpClientErrorException exception) {
+            throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
+        } catch (RuntimeException exception) {
+            if (exception.getMessage() != null && exception.getMessage().contains("must be configured")) {
+                throw exception;
+            }
+            throw new IllegalStateException("Authentication service error. Please try again later.", exception);
         }
     }
 
@@ -61,12 +71,16 @@ public class KeycloakAdapter implements AuthenticationPort {
 
     @Override
     public IdentityProfile getUserInfo(String accessToken) {
-        KeycloakUserInfo response = restClient.get()
-                .uri(userInfoUri())
-                .headers(headers -> headers.setBearerAuth(accessToken))
-                .retrieve()
-                .body(KeycloakUserInfo.class);
-        return Objects.requireNonNull(response, "Keycloak returned an empty user-info response").toProfile();
+        JwtDecoder decoder = jwtDecoderProvider.getIfAvailable();
+        if (decoder == null) {
+            throw new IllegalStateException("JwtDecoder is not configured; cannot decode access token");
+        }
+        Jwt jwt = decoder.decode(accessToken);
+        return new IdentityProfile(
+                jwt.getSubject(),
+                jwt.getClaimAsString("preferred_username"),
+                jwt.getClaimAsString("email"),
+                jwt.getClaimAsString("tenant_id"));
     }
 
     @Override
