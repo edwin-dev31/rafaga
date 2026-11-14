@@ -28,7 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class ProductService {
+public class ProductService implements CatalogProductAccess {
     private final CatalogStore store;
     private final ApplicationEventPublisher events;
     private final Clock clock;
@@ -118,5 +118,11 @@ public class ProductService {
                     .orElseThrow(() -> new CatalogNotFoundException("Category", id)));
         }
         return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean productExists(UUID productId, String tenantId) {
+        return store.findProduct(productId, tenantId).isPresent();
     }
 }

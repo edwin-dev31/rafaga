@@ -37,6 +37,7 @@ dependencies {
 	implementation project(':modules:inventory')
 	implementation project(':modules:orders')
 	implementation project(':modules:cart')
+	implementation project(':modules:media')
 
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'

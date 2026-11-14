@@ -71,8 +71,8 @@ class TenantDatabaseMigratorIntegrationTest {
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
 
-        assertThat(historyCount(shared)).isEqualTo(11);
-        assertThat(historyCount(dedicated)).isEqualTo(11);
+        assertThat(historyCount(shared)).isEqualTo(13);
+        assertThat(historyCount(dedicated)).isEqualTo(13);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'dedicated-a'"))
                 .isEqualTo(1);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'tenant-demo'"))
@@ -99,8 +99,8 @@ class TenantDatabaseMigratorIntegrationTest {
         new DatabaseMigrationConfiguration()
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
-        assertThat(historyCount(shared)).isEqualTo(11);
-        assertThat(historyCount(dedicated)).isEqualTo(11);
+        assertThat(historyCount(shared)).isEqualTo(13);
+        assertThat(historyCount(dedicated)).isEqualTo(13);
         assertThat(flyway(dedicated).migrate().migrationsExecuted).isZero();
     }
 
@@ -115,6 +115,7 @@ class TenantDatabaseMigratorIntegrationTest {
                 .hasMessageContaining("module/version")
                 .hasMessageContaining("tenant/V13__broken.sql")
                 .hasMessageContaining("V13__broken.sql");
+        // The intentionally failing V13 migration stops before V14/V15.
         assertThat(historyCount(dedicated)).isEqualTo(11);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'dedicated-a'"))
                 .isZero();
@@ -140,7 +141,7 @@ class TenantDatabaseMigratorIntegrationTest {
             }
             assertThat(routing.dedicatedDataSources()).containsKey("tenant-dedicated-a");
         }
-        assertThat(historyCount(dedicated)).isEqualTo(11);
+        assertThat(historyCount(dedicated)).isEqualTo(13);
     }
 
     @Test
@@ -172,12 +173,12 @@ class TenantDatabaseMigratorIntegrationTest {
                 .locations("classpath:db/migration", "classpath:db/dev-migration")
                 .load();
         withDevSeed.migrate();
-        assertThat(historyCount(shared)).isEqualTo(13);
+        assertThat(historyCount(shared)).isEqualTo(15);
 
         Flyway productionLocations = flyway(shared);
         assertThat(MigrationLocationCompatibility.includePreviouslyAppliedDevSeed(productionLocations)
                 .migrate().migrationsExecuted).isZero();
-        assertThat(historyCount(shared)).isEqualTo(13);
+        assertThat(historyCount(shared)).isEqualTo(15);
     }
 
     private TenantDatabaseMigrator migrator(String... locations) {

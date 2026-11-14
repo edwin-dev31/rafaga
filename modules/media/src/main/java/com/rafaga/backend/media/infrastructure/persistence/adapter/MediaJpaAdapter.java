@@ -1,0 +1,314 @@
+package com.rafaga.backend.media.infrastructure.persistence.adapter;
+
+import com.rafaga.backend.media.application.port.out.MediaRepository;
+import com.rafaga.backend.media.domain.model.*;
+import com.rafaga.backend.media.infrastructure.persistence.entity.MediaAssetEntity;
+import com.rafaga.backend.media.infrastructure.persistence.entity.ProductImageEntity;
+import com.rafaga.backend.media.infrastructure.persistence.entity.TenantMediaQuotaEntity;
+import com.rafaga.backend.media.infrastructure.persistence.repository.MediaAssetRepository;
+import com.rafaga.backend.media.infrastructure.persistence.repository.ProductImageRepository;
+import com.rafaga.backend.media.infrastructure.persistence.repository.TenantMediaQuotaRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Component
+public class MediaJpaAdapter implements MediaRepository {
+
+    private final MediaAssetRepository assetRepo;
+    private final ProductImageRepository productImageRepo;
+    private final TenantMediaQuotaRepository quotaRepo;
+    private final Clock clock;
+
+    @Value("${media.quota.default-max-assets:500}")
+    private long defaultMaxAssets;
+
+    @Value("${media.quota.default-max-storage-bytes:5368709120}")
+    private long defaultMaxStorageBytes;
+
+    @Autowired
+    public MediaJpaAdapter(MediaAssetRepository assetRepo,
+                           ProductImageRepository productImageRepo,
+                           TenantMediaQuotaRepository quotaRepo) {
+        this(assetRepo, productImageRepo, quotaRepo, Clock.systemUTC());
+    }
+
+    MediaJpaAdapter(MediaAssetRepository assetRepo,
+                    ProductImageRepository productImageRepo,
+                    TenantMediaQuotaRepository quotaRepo,
+                    Clock clock) {
+        this.assetRepo = assetRepo;
+        this.productImageRepo = productImageRepo;
+        this.quotaRepo = quotaRepo;
+        this.clock = clock;
+    }
+
+    @Override
+    @Transactional
+    public MediaAsset save(MediaAsset asset) {
+        MediaAssetEntity entity = toJpa(asset);
+        entity = assetRepo.save(entity);
+        return toDomain(entity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<MediaAsset> findById(UUID id, String tenantId) {
+        return assetRepo.findById(id)
+            .filter(e -> e.getTenantId().equals(tenantId))
+            .map(this::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MediaAsset> findByTenantAndStatus(String tenantId, AssetStatus status) {
+        return assetRepo.findByTenantIdAndStatus(tenantId, status.name()).stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MediaAsset> findPendingExpired(Instant threshold) {
+        return assetRepo.findByStatusAndUploadExpiresAtBefore("PENDING", threshold).stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MediaAsset> findPendingDeletePastGrace(Instant graceThreshold) {
+        return assetRepo.findByStatusAndDeleteRequestedAtBefore("PENDING_DELETE", graceThreshold).stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional
+    public void updateStatus(UUID id, AssetStatus status, String failureReason) {
+        assetRepo.findById(id).ifPresent(entity -> {
+            entity.setStatus(status.name());
+            if (failureReason != null) {
+                entity.setFailureReason(failureReason);
+            }
+            entity.setUpdatedAt(Instant.now(clock));
+            assetRepo.save(entity);
+        });
+    }
+
+    @Override
+    @Transactional
+    public TenantMediaQuota getQuota(String tenantId) {
+        TenantMediaQuotaEntity entity = quotaRepo.findByTenantId(tenantId);
+        if (entity == null) {
+            entity = new TenantMediaQuotaEntity();
+            entity.setTenantId(tenantId);
+            entity.setMaxAssets(defaultMaxAssets);
+            entity.setMaxStorageBytes(defaultMaxStorageBytes);
+            entity.setUsedAssets(0);
+            entity.setUsedStorageBytes(0);
+            entity.setReservedAssets(0);
+            entity.setReservedBytes(0);
+            entity.setUpdatedAt(Instant.now(clock));
+            quotaRepo.save(entity);
+        }
+        return new TenantMediaQuota(
+            entity.getTenantId(),
+            entity.getMaxAssets(),
+            entity.getMaxStorageBytes(),
+            entity.getUsedAssets(),
+            entity.getUsedStorageBytes(),
+            entity.getReservedAssets(),
+            entity.getReservedBytes()
+        );
+    }
+
+    @Override
+    @Transactional
+    public boolean reserveQuota(String tenantId, long bytes) {
+        TenantMediaQuotaEntity entity = quotaRepo.findByTenantId(tenantId);
+        if (entity == null) {
+            entity = new TenantMediaQuotaEntity();
+            entity.setTenantId(tenantId);
+            entity.setMaxAssets(defaultMaxAssets);
+            entity.setMaxStorageBytes(defaultMaxStorageBytes);
+            entity.setUsedAssets(0);
+            entity.setUsedStorageBytes(0);
+            entity.setReservedAssets(0);
+            entity.setReservedBytes(0);
+            entity.setUpdatedAt(Instant.now(clock));
+            quotaRepo.save(entity);
+        }
+        Instant now = Instant.now(clock);
+        int updated = assetRepo.reserveQuota(tenantId, bytes, entity.getMaxAssets(),
+            entity.getMaxStorageBytes(), now);
+        return updated > 0;
+    }
+
+    @Override
+    @Transactional
+    public void releaseQuotaReservation(String tenantId, long bytes) {
+        assetRepo.releaseQuotaReservation(tenantId, bytes, Instant.now(clock));
+    }
+
+    @Override
+    @Transactional
+    public void commitQuotaUsage(String tenantId, long reservedBytes, long actualBytes) {
+        assetRepo.commitQuotaUsage(tenantId, reservedBytes, actualBytes, Instant.now(clock));
+    }
+
+    @Override
+    @Transactional
+    public ProductImage saveProductImage(ProductImage productImage) {
+        ProductImageEntity entity = toProductImageJpa(productImage);
+        entity = productImageRepo.save(entity);
+        return toProductImageDomain(entity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ProductImage> findProductImage(UUID id, String tenantId) {
+        return productImageRepo.findById(id)
+            .filter(e -> e.getTenantId().equals(tenantId))
+            .map(this::toProductImageDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductImage> findByProductId(UUID productId, String tenantId) {
+        return productImageRepo.findByTenantIdAndProductId(tenantId, productId).stream()
+            .map(this::toProductImageDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional
+    public void deleteProductImage(UUID id, String tenantId) {
+        productImageRepo.findById(id)
+            .filter(e -> e.getTenantId().equals(tenantId))
+            .ifPresent(productImageRepo::delete);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByMediaAssetId(UUID mediaAssetId, String tenantId) {
+        return productImageRepo.existsByMediaAssetId(tenantId, mediaAssetId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductImage> findByProductIdOrderByPosition(UUID productId, String tenantId) {
+        return productImageRepo.findByTenantIdAndProductIdOrderByPositionAsc(tenantId, productId).stream()
+            .map(this::toProductImageDomain)
+            .toList();
+    }
+
+    @Override
+    @Transactional
+    public void updateProductImagePositions(List<ProductImage> images) {
+        for (ProductImage pi : images) {
+            productImageRepo.findById(pi.getId()).ifPresent(entity -> {
+                entity.setPosition(pi.getPosition());
+                entity.setPrimary(pi.isPrimary());
+                productImageRepo.save(entity);
+            });
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<MediaAsset> findActiveBranding(String tenantId, AssetType assetType) {
+        return assetRepo.findActiveBranding(tenantId, assetType.name()).stream()
+            .findFirst()
+            .map(this::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MediaAsset> findReadyWithStagingKey() {
+        return assetRepo.findReadyWithStagingKey().stream()
+            .map(this::toDomain)
+            .toList();
+    }
+
+    // ---- Mapping helpers ----
+
+    private MediaAssetEntity toJpa(MediaAsset asset) {
+        MediaAssetEntity entity = new MediaAssetEntity();
+        entity.setId(asset.getId());
+        entity.setTenantId(asset.getTenantId());
+        entity.setUploadKey(asset.getUploadKey());
+        entity.setUploadExpiresAt(asset.getUploadExpiresAt());
+        entity.setReservedBytes(asset.getReservedBytes());
+        entity.setObjectKey(asset.getObjectKey());
+        entity.setDeclaredContentType(asset.getDeclaredContentType());
+        entity.setContentType(asset.getContentType());
+        entity.setSizeBytes(asset.getSizeBytes());
+        entity.setWidth(asset.getWidth());
+        entity.setHeight(asset.getHeight());
+        entity.setStatus(asset.getStatus().name());
+        entity.setAssetType(asset.getAssetType().name());
+        entity.setFailureCode(asset.getFailureCode());
+        entity.setFailureReason(asset.getFailureReason());
+        entity.setCreatedAt(asset.getCreatedAt());
+        entity.setUpdatedAt(asset.getUpdatedAt());
+        entity.setDeleteRequestedAt(asset.getDeleteRequestedAt());
+        entity.setDeletedAt(asset.getDeletedAt());
+        return entity;
+    }
+
+    private MediaAsset toDomain(MediaAssetEntity entity) {
+        return MediaAsset.fromDb(
+            entity.getId(),
+            entity.getTenantId(),
+            entity.getUploadKey(),
+            entity.getUploadExpiresAt(),
+            entity.getReservedBytes(),
+            entity.getDeclaredContentType(),
+            AssetType.valueOf(entity.getAssetType()),
+            entity.getCreatedAt(),
+            entity.getObjectKey(),
+            entity.getContentType(),
+            entity.getSizeBytes(),
+            entity.getWidth(),
+            entity.getHeight(),
+            AssetStatus.valueOf(entity.getStatus()),
+            entity.getFailureCode(),
+            entity.getFailureReason(),
+            entity.getUpdatedAt(),
+            entity.getDeleteRequestedAt(),
+            entity.getDeletedAt()
+        );
+    }
+
+    private ProductImageEntity toProductImageJpa(ProductImage pi) {
+        ProductImageEntity entity = new ProductImageEntity();
+        entity.setId(pi.getId());
+        entity.setTenantId(pi.getTenantId());
+        entity.setProductId(pi.getProductId());
+        entity.setMediaAssetId(pi.getMediaAssetId());
+        entity.setPosition(pi.getPosition());
+        entity.setPrimary(pi.isPrimary());
+        entity.setCreatedAt(pi.getCreatedAt());
+        return entity;
+    }
+
+    private ProductImage toProductImageDomain(ProductImageEntity entity) {
+        return new ProductImage(
+            entity.getId(),
+            entity.getTenantId(),
+            entity.getProductId(),
+            entity.getMediaAssetId(),
+            entity.getPosition(),
+            entity.isPrimary(),
+            entity.getCreatedAt()
+        );
+    }
+}

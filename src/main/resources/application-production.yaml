@@ -72,6 +72,14 @@ rafaga:
       admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID}
       admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
 
+media:
+  r2:
+    account-id: ${MEDIA_R2_ACCOUNT_ID}
+    access-key-id: ${MEDIA_R2_ACCESS_KEY_ID}
+    secret-access-key: ${MEDIA_R2_SECRET_ACCESS_KEY}
+    bucket: ${MEDIA_R2_BUCKET:rafaga-media}
+    public-base-url: ${MEDIA_R2_PUBLIC_BASE_URL:https://media.rafaga.com}
+
 springdoc:
   api-docs:
     enabled: false

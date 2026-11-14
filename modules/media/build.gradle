@@ -1,0 +1,18 @@
+description = 'Media asset management module.'
+
+dependencies {
+	implementation project(':modules:common')
+	implementation project(':modules:tenant')
+	implementation project(':modules:catalog')
+
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+	implementation platform('software.amazon.awssdk:bom:2.32.18')
+	implementation 'software.amazon.awssdk:s3'
+	implementation 'software.amazon.awssdk:url-connection-client'
+
+	implementation 'net.coobird:thumbnailator:0.4.20'
+	implementation 'com.github.usefulness:webp-imageio:0.2.1'
+}
