@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ public class CategoryService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "categories", allEntries = true)
     public CategoryView createCategory(String name, String slug, UUID parentId, int displayOrder) {
         String tenantId = TenantContext.getCurrentTenantId();
         if (store.findCategoryBySlug(slug, tenantId).isPresent()) {
@@ -32,6 +35,7 @@ public class CategoryService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "categories", allEntries = true)
     public CategoryView updateCategory(UUID categoryId, String name, String slug,
             UUID parentId, int displayOrder) {
         String tenantId = TenantContext.getCurrentTenantId();
@@ -51,6 +55,7 @@ public class CategoryService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "categories", keyGenerator = "tenantScopedCacheKeyGenerator")
     public List<CategoryNode> getCategoryTree() {
         List<Category> categories = store.findCategories(TenantContext.getCurrentTenantId());
         Map<UUID, List<Category>> byParent = new HashMap<>();

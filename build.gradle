@@ -1,5 +1,6 @@
 plugins {
 	id 'java'
+	id 'jacoco'
 	id 'org.springframework.boot' version '4.1.2'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -66,6 +67,9 @@ dependencies {
 subprojects {
 	apply plugin: 'java-library'
 	apply plugin: 'io.spring.dependency-management'
+	if (path != ':modules') {
+		apply plugin: 'jacoco'
+	}
 
 	tasks.withType(JavaCompile).configureEach {
 		options.compilerArgs += '-parameters'
@@ -106,9 +110,35 @@ subprojects {
 		systemProperty 'spring.profiles.active', System.getProperty('spring.profiles.active', 'test')
 		systemProperty 'spring.config.additional-location', rootProject.file('src/test/resources/').toURI().toString()
 	}
+
+	pluginManager.withPlugin('jacoco') {
+		tasks.named('jacocoTestReport', JacocoReport) {
+			dependsOn tasks.named('test')
+			reports {
+				html.required = true
+				xml.required = true
+				csv.required = false
+			}
+		}
+	}
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
 	systemProperty 'spring.profiles.active', System.getProperty('spring.profiles.active', 'test')
+}
+
+tasks.named('jacocoTestReport', JacocoReport) {
+	def coverageProjects = [project] + subprojects.findAll { it.path != ':modules' }
+	dependsOn coverageProjects.collect { it.tasks.named('test') }
+
+	executionData.from(files(coverageProjects.collect { it.file('build/jacoco/test.exec') }))
+	sourceDirectories.from(files(coverageProjects.collect { it.file('src/main/java') }))
+	classDirectories.from(files(coverageProjects.collect { it.file('build/classes/java/main') }))
+
+	reports {
+		html.required = true
+		xml.required = true
+		csv.required = false
+	}
 }

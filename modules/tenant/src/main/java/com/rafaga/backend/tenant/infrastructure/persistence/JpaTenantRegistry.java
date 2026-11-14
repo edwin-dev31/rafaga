@@ -26,7 +26,7 @@ class JpaTenantRegistry implements TenantRegistry {
 
     @Override
     public Optional<TenantConfig> findByDomain(String domain) {
-        return store.findByDomain(domain).flatMap(config -> cache.get(config.tenantId()));
+        return cache.getByDomain(domain);
     }
 
     @Override

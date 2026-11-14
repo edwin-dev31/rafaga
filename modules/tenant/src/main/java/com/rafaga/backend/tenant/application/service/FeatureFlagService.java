@@ -7,6 +7,8 @@ import com.rafaga.backend.tenant.domain.event.FeatureFlagUpdatedEvent;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ public class FeatureFlagService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "feature-flags", key = "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0")
     public boolean isFeatureEnabled(String featureName) {
         return getAllFeatures().getOrDefault(featureName, false);
     }
@@ -35,6 +38,7 @@ public class FeatureFlagService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "feature-flags", key = "#p0 + ':' + #p1")
     public void updateFeatureFlag(String tenantId, String featureName, boolean enabled) {
         TenantConfig tenant = findTenant(tenantId);
         tenantRegistry.update(withFeatureFlag(tenant, featureName, enabled));

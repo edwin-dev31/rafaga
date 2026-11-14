@@ -21,6 +21,8 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +65,7 @@ public class ProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0")
     public ProductView updateProduct(UUID productId, UpdateProduct command) {
         String tenantId = TenantContext.getCurrentTenantId();
         Product product = product(productId, tenantId);
@@ -85,6 +88,7 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
     public ProductView getProductById(UUID productId) {
         return ProductView.from(product(productId, TenantContext.getCurrentTenantId()));
     }
@@ -95,6 +99,7 @@ public class ProductService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "products", key = "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0")
     public void deleteProduct(UUID productId) {
         String tenantId = TenantContext.getCurrentTenantId();
         store.deleteProduct(product(productId, tenantId));
