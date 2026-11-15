@@ -196,6 +196,11 @@ Local values can be overridden with environment variables.
 
 The `dev` profile targets local PostgreSQL, Redis and Keycloak, enables debug logs for tenant resolution and Spring Modulith, and enables the API documentation UI. The Gradle `test` profile uses the isolated PostgreSQL/Redis compose stack; some datasource-routing tests additionally start their own Testcontainers database. The `production` profile requires all database, Keycloak, CORS, registration-token, and Redis cluster variables above. It uses the restricted shared-database role for application traffic, validates Flyway migrations, uses a 50-connection Hikari pool, enables graceful shutdown, validates JWT issuer plus client audience, and never enables internal tenant-header resolution.
 
+Every backend response contains `X-Correlation-ID`. Clients may provide a UUID in
+that header to continue a request trace; other values are replaced. The same ID
+is included in structured application logs, while credentials, tokens, and
+request bodies are never logged.
+
 Dedicated-database credentials are never stored in `TenantConfig`. `TenantDatabaseCredentialsProvider` is the port used to integrate the appropriate secrets manager.
 The `postgres-role-setup` services create or update the restricted application role and grant table access after PostgreSQL starts. Run them again after changing database credentials. PostgreSQL row-level security is enforced for application queries; Flyway uses the separate administrator connection.
 

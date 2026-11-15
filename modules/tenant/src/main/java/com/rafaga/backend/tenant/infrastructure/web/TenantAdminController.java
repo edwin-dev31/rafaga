@@ -74,7 +74,7 @@ public class TenantAdminController {
             String name,
             List<String> domains,
             DeploymentMode deploymentMode,
-            String databaseConfigId,
+            boolean dedicatedDatabaseConfigured,
             String planId,
             String status,
             Map<String, Boolean> featureFlags) {
@@ -84,7 +84,7 @@ public class TenantAdminController {
                     config.name(),
                     config.domains(),
                     config.deploymentMode(),
-                    config.databaseConfig() == null ? null : config.databaseConfig().secretReference(),
+                    config.databaseConfig() != null,
                     config.planId(),
                     config.status().name(),
                     config.featureFlags());

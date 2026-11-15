@@ -1,5 +1,15 @@
 package com.rafaga.backend.infrastructure.web.admin;
 
+import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.domain.model.DeploymentMode;
+import com.rafaga.backend.tenant.domain.model.TenantStatus;
+import com.rafaga.backend.tenant.infrastructure.persistence.TenantAwareRoutingDataSource;
+import com.zaxxer.hikari.HikariDataSource;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryUsage;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.boot.health.contributor.Health;
@@ -29,11 +39,16 @@ public class SystemAdministrationController {
 
     private final Map<String, HealthIndicator> healthIndicators;
     private final CacheManager cacheManager;
+    private final TenantRegistry tenantRegistry;
+    private final TenantAwareRoutingDataSource dataSource;
 
     public SystemAdministrationController(Map<String, HealthIndicator> healthIndicators,
-            CacheManager cacheManager) {
+            CacheManager cacheManager, TenantRegistry tenantRegistry,
+            TenantAwareRoutingDataSource dataSource) {
         this.healthIndicators = Map.copyOf(healthIndicators);
         this.cacheManager = cacheManager;
+        this.tenantRegistry = tenantRegistry;
+        this.dataSource = dataSource;
     }
 
     @GetMapping("/health")
@@ -44,6 +59,26 @@ public class SystemAdministrationController {
         components.put("redis", statusOf("redisHealthIndicator"));
         components.put("keycloak", statusOf("keycloakHealthIndicator"));
         return new HealthResponse(overallStatus(components), Map.copyOf(components));
+    }
+
+    @GetMapping("/operations/overview")
+    public PlatformOverviewResponse overview() {
+        List<com.rafaga.backend.tenant.domain.model.TenantConfig> tenants = tenantRegistry.findAll();
+        HikariDataSource sharedPool = dataSource.sharedDataSource();
+        MemoryUsage heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+        Instant startedAt = Instant.ofEpochMilli(ManagementFactory.getRuntimeMXBean().getStartTime());
+        return new PlatformOverviewResponse(
+                startedAt,
+                Duration.between(startedAt, Instant.now()).toSeconds(),
+                new JvmMemoryResponse(heap.getUsed(), heap.getCommitted(), heap.getMax()),
+                PoolResponse.from(sharedPool),
+                health(),
+                new CacheResponse(cacheManager.getCacheNames().stream().sorted().toList()),
+                new TenantCountResponse(
+                        tenants.size(),
+                        tenants.stream().filter(tenant -> tenant.status() == TenantStatus.ACTIVE).count(),
+                        tenants.stream().filter(tenant -> tenant.deploymentMode() == DeploymentMode.DEDICATED_DB).count(),
+                        tenants.stream().mapToLong(tenant -> tenant.domains().size()).sum()));
     }
 
     @PostMapping("/cache/invalidate")
@@ -79,4 +114,30 @@ public class SystemAdministrationController {
     }
 
     public record HealthResponse(String status, Map<String, String> components) { }
+
+    public record PlatformOverviewResponse(
+            Instant startedAt,
+            long uptimeSeconds,
+            JvmMemoryResponse jvmMemory,
+            PoolResponse sharedDatabasePool,
+            HealthResponse dependencies,
+            CacheResponse cache,
+            TenantCountResponse tenants) { }
+
+    public record JvmMemoryResponse(long usedBytes, long committedBytes, long maxBytes) { }
+
+    public record PoolResponse(int active, int idle, int total, int maximum, int pending) {
+        static PoolResponse from(HikariDataSource pool) {
+            var metrics = pool.getHikariPoolMXBean();
+            if (metrics == null) {
+                return new PoolResponse(0, 0, 0, pool.getMaximumPoolSize(), 0);
+            }
+            return new PoolResponse(metrics.getActiveConnections(), metrics.getIdleConnections(),
+                    metrics.getTotalConnections(), pool.getMaximumPoolSize(), metrics.getThreadsAwaitingConnection());
+        }
+    }
+
+    public record CacheResponse(List<String> configuredRegions) { }
+
+    public record TenantCountResponse(long total, long active, long dedicatedDatabases, long domains) { }
 }
