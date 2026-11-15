@@ -95,6 +95,9 @@ public class R2ObjectStorage implements ObjectStorage {
             .bucket(bucket)
             .key(objectKey)
             .contentType(contentType)
+            // This adapter uploads processed final objects only. Staging uploads
+            // use the browser's presigned URL and must never be publicly cached.
+            .cacheControl("public, max-age=31536000, immutable")
             .build(),
             RequestBody.fromBytes(data));
     }

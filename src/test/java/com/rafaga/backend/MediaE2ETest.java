@@ -2,6 +2,11 @@ package com.rafaga.backend;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.media.application.port.out.ObjectStorage;
+import com.rafaga.backend.media.application.port.out.MediaRepository;
+import com.rafaga.backend.media.domain.model.AssetStatus;
+import com.rafaga.backend.media.domain.model.AssetType;
+import com.rafaga.backend.media.domain.model.MediaAsset;
+import com.rafaga.backend.media.infrastructure.job.MediaCleanupJob;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
@@ -15,6 +20,10 @@ import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.Instant;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +44,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * End-to-end test that creates two stores, each uploads 2 products with solid-color
+ * End-to-end test that creates two stores, uploads products with several solid-color
  * JPEG images, processes them to WebP, and validates the complete media flow.
  */
 @SpringBootTest
@@ -52,6 +61,8 @@ class MediaE2ETest {
     @Autowired private ObjectMapper mapper;
     @Autowired private TenantRegistry tenants;
     @Autowired private ObjectStorage objectStorage;
+    @Autowired private MediaRepository mediaRepository;
+    @Autowired private MediaCleanupJob mediaCleanupJob;
 
     @BeforeEach
     void registerTenants() {
@@ -76,7 +87,7 @@ class MediaE2ETest {
         String productB1 = createProduct(TENANT_B, HOST_B, "Green Product B1");
         String productB2 = createProduct(TENANT_B, HOST_B, "Yellow Product B2");
 
-        // --- Tenant A: upload images for product A1 (red + orange) ---
+        // --- Tenant A: upload images for product A1 ---
         List<UUID> assetIdsA1 = uploadAndConfirmImages(TENANT_A, HOST_A,
             List.of(new ColorImage(Color.RED, 800, 600), new ColorImage(Color.ORANGE, 640, 480)));
         assertThat(assetIdsA1).hasSize(2);
@@ -119,6 +130,55 @@ class MediaE2ETest {
         // --- Verify all assets are WebP ---
         verifyAllAssetsAreWebP(TENANT_A, HOST_A);
         verifyAllAssetsAreWebP(TENANT_B, HOST_B);
+    }
+
+    @Test
+    void quotaReservationIsAtomicWhenConcurrentRequestsCompeteForOneSlot() throws Exception {
+        String tenantId = UUID.randomUUID().toString();
+        tenants.register(tenant(tenantId, tenantId + ".media-e2e.test"));
+        withinTenant(tenantId, () -> {
+            mediaRepository.getQuota(tenantId);
+            mediaRepository.updateQuotaLimits(tenantId, 1, 100);
+        });
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first = executor.submit(() -> reserveQuota(tenantId, 100));
+            Future<Boolean> second = executor.submit(() -> reserveQuota(tenantId, 100));
+
+            assertThat(List.of(first.get(), second.get())).containsExactlyInAnyOrder(true, false);
+        } finally {
+            executor.shutdownNow();
+        }
+        withinTenant(tenantId, () -> {
+            var quota = mediaRepository.getQuota(tenantId);
+            assertThat(quota.reservedAssets()).isEqualTo(1);
+            assertThat(quota.reservedBytes()).isEqualTo(100);
+        });
+    }
+
+    @Test
+    void cleanupRemovesAnExpiredStagingObjectAndReleasesItsQuotaReservation() {
+        String tenantId = UUID.randomUUID().toString();
+        String uploadKey = "tenants/" + tenantId + "/uploads/expired.jpg";
+        UUID assetId = UUID.randomUUID();
+        tenants.register(tenant(tenantId, tenantId + ".media-e2e.test"));
+        withinTenant(tenantId, () -> {
+            assertThat(mediaRepository.reserveQuota(tenantId, 123)).isTrue();
+            mediaRepository.save(new MediaAsset(assetId, tenantId, uploadKey,
+                    Instant.now().minusSeconds(60), 123, "image/jpeg", AssetType.PRODUCT, Instant.now()));
+            objectStorage.upload(uploadKey, new byte[] {1, 2, 3}, "image/jpeg");
+        });
+
+        mediaCleanupJob.cleanupExpiredPending();
+
+        withinTenant(tenantId, () -> {
+            MediaAsset asset = mediaRepository.findById(assetId, tenantId).orElseThrow();
+            assertThat(asset.getStatus()).isEqualTo(AssetStatus.FAILED);
+            assertThat(mediaRepository.getQuota(tenantId).reservedAssets()).isZero();
+            assertThat(mediaRepository.getQuota(tenantId).reservedBytes()).isZero();
+        });
+        assertThat(objectStorage.exists(uploadKey)).isFalse();
     }
 
     /** Creates a product via the catalog API and returns its ID. */
@@ -230,7 +290,7 @@ class MediaE2ETest {
             assertThat(asset.get("contentType")).isEqualTo("image/webp");
             assertThat(asset.get("status")).isEqualTo("READY");
             assertThat(asset.get("url")).isNotNull().isInstanceOf(String.class);
-            assertThat((String) asset.get("url")).isNotEmpty();
+            assertThat((String) asset.get("url")).contains("/assets/").doesNotContain("/uploads/");
             assertThat(asset.get("width")).isNotNull();
             assertThat(asset.get("height")).isNotNull();
         }
@@ -273,6 +333,24 @@ class MediaE2ETest {
         return jwt().jwt(jwt -> jwt.claim("tenant_id", tenantId))
                 .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
                         "ROLE_STORE_MANAGER"));
+    }
+
+    private boolean reserveQuota(String tenantId, long bytes) {
+        TenantContext.setCurrentTenantId(tenantId);
+        try {
+            return mediaRepository.reserveQuota(tenantId, bytes);
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    private void withinTenant(String tenantId, Runnable action) {
+        TenantContext.setCurrentTenantId(tenantId);
+        try {
+            action.run();
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     private TenantConfig tenant(String id, String domain) {

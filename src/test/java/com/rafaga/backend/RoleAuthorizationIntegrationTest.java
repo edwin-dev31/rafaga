@@ -39,6 +39,11 @@ class RoleAuthorizationIntegrationTest extends TenantIsolationTestBase {
                         .with(host(HOST_A))
                         .with(jwtFor(TENANT_A, "STORE_MANAGER")))
                 .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/admin/media/overview")
+                        .with(host(HOST_A))
+                        .with(jwtFor(TENANT_A, "STORE_MANAGER")))
+                .andExpect(status().isForbidden());
     }
 
     @Test

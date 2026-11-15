@@ -88,18 +88,23 @@ Cloudflare normally creates or manages the necessary DNS configuration as part o
    | Value | `<MEDIA_HOST>` |
 
 7. Set **Cache eligibility** to **Eligible for cache**.
-8. Under **Edge TTL**, select the option to override the origin cache-control value (for example, **Ignore cache-control header and use this TTL**).
-9. Set the TTL to **7 days** (`604800` seconds).
-10. Leave **Browser TTL** without an additional override and **Cache Key** at its defaults.
+8. Keep the origin `Cache-Control` header. Do not configure an Edge TTL or Browser TTL override that replaces it.
+9. Leave **Cache Key** at its defaults.
 11. Select **Deploy**.
 
 **Expected result:** The rule applies only to `<MEDIA_HOST>` and does not change caching for the main website.
 
-### 7.1. Why seven days?
+### 7.1. Immutable final assets
 
-Seven days was selected for initial development and testing rather than 30 days. A longer TTL can be considered for production when every image update uses a new object key.
+The backend stores processed final WebP files with:
 
-Edge TTL is not a guarantee that every cache location will retain the object for seven days: Cloudflare may evict it sooner. Browser caching is governed separately, because no Browser TTL override was configured.
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
+
+Final asset keys are UUID based and never overwritten; replacement creates a new
+key. This makes one year of browser and CDN caching safe. Cloudflare can still
+evict an object before its TTL, so a later request can be a cache miss.
 
 ## 8. Verify public access and CDN caching
 
@@ -134,6 +139,55 @@ Edge TTL is not a guarantee that every cache location will retain the object for
 **Observed result:** `CF-Cache-Status: HIT`, confirming that the test image was served from Cloudflare cache for that request.
 
 > An isolated `MISS` does not necessarily indicate an incorrect cache rule; it may be the first request reaching a particular cache location.
+
+## 8.3 Configure R2 upload CORS
+
+This is separate from the backend CORS policy. The backend authorizes calls to the Ráfaga API, while a browser uploads directly to a presigned R2 URL and its preflight request is evaluated by R2.
+
+Configure the bucket with one explicit rule for presigned browser uploads:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://dashboard.example.com",
+      "https://shop-one.example.com",
+      "https://shop-two.example.com"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 300
+  }
+]
+```
+
+Replace the illustrative hosts with the dashboard origin and every active, HTTPS storefront origin that is allowed to upload. Do not use `*`, wildcard subdomains, or reflected request origins. Add only the headers actually sent by the browser and required by the presigned upload.
+
+Treat this rule as deployment configuration: generate or review the complete origin list whenever a tenant domain is created, verified, changed, suspended, or removed; apply it through Cloudflare/IaC; then retain the prior version for rollback. Test an `OPTIONS` preflight and a direct `PUT` from each newly added origin. The CDN public-domain rule remains separate and must never expose the
+`tenants/*/uploads/*` staging prefix.
+
+### 8.4 Restrict the public CDN to final objects
+
+R2 bucket CORS controls browser access to the presigned upload endpoint; it does not decide which object keys the public CDN can serve. Attach a Worker route to `https://<MEDIA_HOST>/*` (or use the equivalent edge access policy) that permits only final object prefixes. The Worker must run before proxying to
+R2:
+
+```javascript
+export default {
+  async fetch(request) {
+    const { pathname } = new URL(request.url);
+    const finalObject = /^\/tenants\/[^/]+\/(assets|branding)\//.test(pathname);
+
+    if (!finalObject) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    return fetch(request);
+  }
+};
+```
+
+Deploy this only on the media host, validate an existing `assets/` object and a branding object return `200`, and validate a `tenants/<id>/uploads/<id>` path returns `404`. Keep the prior Worker version available for rollback. This is a defense-in-depth boundary: neither a database record nor a backend URL should be required for the CDN to reject staging data.
 
 ## 9. Create bucket-scoped S3 credentials
 
@@ -242,7 +296,7 @@ A CDN purge cannot guarantee removal of copies already stored by a browser or an
 | Custom domain connected | `Active` |
 | Minimum TLS version | TLS 1.2 |
 | Subdomain-specific cache rule deployed | Completed |
-| Edge TTL | 7 days |
+| Cache policy | Preserves final-object `Cache-Control` (`max-age=31536000, immutable`) |
 | Test image uploaded to R2 | Completed |
 | Image served through custom domain | Verified |
 | `CF-Cache-Status: HIT` | Verified |

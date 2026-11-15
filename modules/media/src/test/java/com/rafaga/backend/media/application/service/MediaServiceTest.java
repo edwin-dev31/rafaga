@@ -4,6 +4,7 @@ import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.media.application.dto.AssociateBatch;
 import com.rafaga.backend.media.application.dto.ConfirmBatch;
 import com.rafaga.backend.media.application.dto.MediaAssetDto;
+import com.rafaga.backend.media.application.dto.MediaAdminSummary;
 import com.rafaga.backend.media.application.dto.ProductImageDto;
 import com.rafaga.backend.media.application.dto.UploadBatch;
 import com.rafaga.backend.media.application.exception.MediaConflictException;
@@ -569,6 +570,62 @@ class MediaServiceTest {
         assertThat(result).isEqualTo(quota);
         assertThat(result.effectiveUsedAssets()).isEqualTo(12);
         assertThat(result.effectiveUsedBytes()).isEqualTo(6_000_000L);
+    }
+
+    @Test
+    void getAdminSummary_countsEveryStatusAndOnlyExposesRecentFailuresAndPendingCleanup() {
+        MediaAsset failed = MediaAsset.fromDb(UUID.randomUUID(), TENANT_ID, "staging/failed", NOW,
+                0, "image/jpeg", AssetType.PRODUCT, NOW, null, null, null, null, null,
+                AssetStatus.FAILED, "MEDIA_PROCESSING_FAILED", "invalid image", NOW.plusSeconds(10), null, null);
+        MediaAsset pendingDelete = MediaAsset.fromDb(UUID.randomUUID(), TENANT_ID, null, null,
+                0, "image/jpeg", AssetType.PRODUCT, NOW, "final/object.webp", "image/webp", 100L, 10, 10,
+                AssetStatus.PENDING_DELETE, null, null, NOW.plusSeconds(5), NOW.plusSeconds(4), null);
+        TenantMediaQuota quota = new TenantMediaQuota(TENANT_ID, 100, 20_000_000L,
+                2, 100L, 1, 50L);
+        when(repository.findByTenantAndStatus(TENANT_ID, AssetStatus.FAILED)).thenReturn(List.of(failed));
+        when(repository.findByTenantAndStatus(TENANT_ID, AssetStatus.PENDING_DELETE)).thenReturn(List.of(pendingDelete));
+        when(repository.findByTenantAndStatus(TENANT_ID, AssetStatus.PENDING)).thenReturn(List.of());
+        when(repository.findByTenantAndStatus(TENANT_ID, AssetStatus.READY)).thenReturn(List.of());
+        when(repository.findByTenantAndStatus(TENANT_ID, AssetStatus.DELETED)).thenReturn(List.of());
+        when(repository.getQuota(TENANT_ID)).thenReturn(quota);
+
+        MediaAdminSummary summary = mediaService.getAdminSummary();
+
+        assertThat(summary.assetsByStatus()).containsEntry(AssetStatus.FAILED, 1L)
+                .containsEntry(AssetStatus.PENDING_DELETE, 1L)
+                .containsEntry(AssetStatus.READY, 0L);
+        assertThat(summary.recentFailures()).singleElement()
+                .extracting(MediaAdminSummary.FailedAsset::failureCode)
+                .isEqualTo("MEDIA_PROCESSING_FAILED");
+        assertThat(summary.pendingCleanupAssets()).singleElement()
+                .extracting(MediaAdminSummary.PendingCleanupAsset::id)
+                .isEqualTo(pendingDelete.getId());
+        assertThat(summary.quota()).isEqualTo(quota);
+    }
+
+    @Test
+    void updateQuotaLimits_rejectsLimitsBelowCurrentUsage() {
+        TenantMediaQuota current = new TenantMediaQuota(TENANT_ID, 500, 10_000_000L,
+                10, 5_000_000L, 2, 1_000_000L);
+        when(repository.getQuota(TENANT_ID)).thenReturn(current);
+
+        assertThatThrownBy(() -> mediaService.updateQuotaLimits(11, 5_999_999L))
+                .isInstanceOf(MediaValidationException.class)
+                .hasMessageContaining("uso y las reservas actuales");
+    }
+
+    @Test
+    void updateQuotaLimits_persistsValidLimits() {
+        TenantMediaQuota current = new TenantMediaQuota(TENANT_ID, 500, 10_000_000L,
+                10, 5_000_000L, 2, 1_000_000L);
+        TenantMediaQuota updated = new TenantMediaQuota(TENANT_ID, 100, 20_000_000L,
+                10, 5_000_000L, 2, 1_000_000L);
+        when(repository.getQuota(TENANT_ID)).thenReturn(current);
+        when(repository.updateQuotaLimits(TENANT_ID, 100, 20_000_000L)).thenReturn(updated);
+
+        TenantMediaQuota result = mediaService.updateQuotaLimits(100, 20_000_000L);
+
+        assertThat(result).isEqualTo(updated);
     }
 
     // ---- listProductImages ----

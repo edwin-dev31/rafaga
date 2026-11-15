@@ -31,14 +31,15 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 
 @Testcontainers
 class TenantDatabaseMigratorIntegrationTest {
     @Container
-    final PostgreSQLContainer shared = new PostgreSQLContainer("postgres:16-alpine");
+    final PostgreSQLContainer shared = postgres();
 
     @Container
-    final PostgreSQLContainer dedicated = new PostgreSQLContainer("postgres:16-alpine");
+    final PostgreSQLContainer dedicated = postgres();
 
     @BeforeEach
     void createRestrictedRuntimeRole() throws Exception {
@@ -71,8 +72,8 @@ class TenantDatabaseMigratorIntegrationTest {
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
 
-        assertThat(historyCount(shared)).isEqualTo(13);
-        assertThat(historyCount(dedicated)).isEqualTo(13);
+        assertThat(historyCount(shared)).isEqualTo(14);
+        assertThat(historyCount(dedicated)).isEqualTo(14);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'dedicated-a'"))
                 .isEqualTo(1);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'tenant-demo'"))
@@ -99,8 +100,8 @@ class TenantDatabaseMigratorIntegrationTest {
         new DatabaseMigrationConfiguration()
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
-        assertThat(historyCount(shared)).isEqualTo(13);
-        assertThat(historyCount(dedicated)).isEqualTo(13);
+        assertThat(historyCount(shared)).isEqualTo(14);
+        assertThat(historyCount(dedicated)).isEqualTo(14);
         assertThat(flyway(dedicated).migrate().migrationsExecuted).isZero();
     }
 
@@ -141,7 +142,7 @@ class TenantDatabaseMigratorIntegrationTest {
             }
             assertThat(routing.dedicatedDataSources()).containsKey("tenant-dedicated-a");
         }
-        assertThat(historyCount(dedicated)).isEqualTo(13);
+        assertThat(historyCount(dedicated)).isEqualTo(14);
     }
 
     @Test
@@ -173,12 +174,12 @@ class TenantDatabaseMigratorIntegrationTest {
                 .locations("classpath:db/migration", "classpath:db/dev-migration")
                 .load();
         withDevSeed.migrate();
-        assertThat(historyCount(shared)).isEqualTo(15);
+        assertThat(historyCount(shared)).isEqualTo(16);
 
         Flyway productionLocations = flyway(shared);
         assertThat(MigrationLocationCompatibility.includePreviouslyAppliedDevSeed(productionLocations)
                 .migrate().migrationsExecuted).isZero();
-        assertThat(historyCount(shared)).isEqualTo(15);
+        assertThat(historyCount(shared)).isEqualTo(16);
     }
 
     private TenantDatabaseMigrator migrator(String... locations) {
@@ -186,6 +187,15 @@ class TenantDatabaseMigratorIntegrationTest {
         ObjectProvider<TenantDatabaseCredentialsProvider> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(credentials());
         return new TenantDatabaseMigrator(provider, locations);
+    }
+
+    private PostgreSQLContainer postgres() {
+        // The Alpine image can emit the final readiness line without a trailing
+        // whitespace character. Its default log-based wait then times out even
+        // though PostgreSQL is accepting connections. A port wait verifies the
+        // actual capability required by this integration test.
+        return new PostgreSQLContainer("postgres:16-alpine")
+                .waitingFor(Wait.forListeningPort());
     }
 
     private TenantDatabaseCredentialsProvider credentials() {

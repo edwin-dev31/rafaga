@@ -110,46 +110,24 @@ public class MediaJpaAdapter implements MediaRepository {
     @Override
     @Transactional
     public TenantMediaQuota getQuota(String tenantId) {
-        TenantMediaQuotaEntity entity = quotaRepo.findByTenantId(tenantId);
-        if (entity == null) {
-            entity = new TenantMediaQuotaEntity();
-            entity.setTenantId(tenantId);
-            entity.setMaxAssets(defaultMaxAssets);
-            entity.setMaxStorageBytes(defaultMaxStorageBytes);
-            entity.setUsedAssets(0);
-            entity.setUsedStorageBytes(0);
-            entity.setReservedAssets(0);
-            entity.setReservedBytes(0);
-            entity.setUpdatedAt(Instant.now(clock));
-            quotaRepo.save(entity);
-        }
-        return new TenantMediaQuota(
-            entity.getTenantId(),
-            entity.getMaxAssets(),
-            entity.getMaxStorageBytes(),
-            entity.getUsedAssets(),
-            entity.getUsedStorageBytes(),
-            entity.getReservedAssets(),
-            entity.getReservedBytes()
-        );
+        return toQuota(quotaEntity(tenantId));
+    }
+
+    @Override
+    @Transactional
+    public TenantMediaQuota updateQuotaLimits(
+            String tenantId, long maxAssets, long maxStorageBytes) {
+        TenantMediaQuotaEntity entity = quotaEntity(tenantId);
+        entity.setMaxAssets(maxAssets);
+        entity.setMaxStorageBytes(maxStorageBytes);
+        entity.setUpdatedAt(Instant.now(clock));
+        return toQuota(quotaRepo.save(entity));
     }
 
     @Override
     @Transactional
     public boolean reserveQuota(String tenantId, long bytes) {
-        TenantMediaQuotaEntity entity = quotaRepo.findByTenantId(tenantId);
-        if (entity == null) {
-            entity = new TenantMediaQuotaEntity();
-            entity.setTenantId(tenantId);
-            entity.setMaxAssets(defaultMaxAssets);
-            entity.setMaxStorageBytes(defaultMaxStorageBytes);
-            entity.setUsedAssets(0);
-            entity.setUsedStorageBytes(0);
-            entity.setReservedAssets(0);
-            entity.setReservedBytes(0);
-            entity.setUpdatedAt(Instant.now(clock));
-            quotaRepo.save(entity);
-        }
+        TenantMediaQuotaEntity entity = quotaEntity(tenantId);
         Instant now = Instant.now(clock);
         int updated = assetRepo.reserveQuota(tenantId, bytes, entity.getMaxAssets(),
             entity.getMaxStorageBytes(), now);
@@ -315,6 +293,34 @@ public class MediaJpaAdapter implements MediaRepository {
             entity.getDeleteRequestedAt(),
             entity.getDeletedAt()
         );
+    }
+
+    private TenantMediaQuotaEntity quotaEntity(String tenantId) {
+        TenantMediaQuotaEntity entity = quotaRepo.findByTenantId(tenantId);
+        if (entity != null) {
+            return entity;
+        }
+        entity = new TenantMediaQuotaEntity();
+        entity.setTenantId(tenantId);
+        entity.setMaxAssets(defaultMaxAssets);
+        entity.setMaxStorageBytes(defaultMaxStorageBytes);
+        entity.setUsedAssets(0);
+        entity.setUsedStorageBytes(0);
+        entity.setReservedAssets(0);
+        entity.setReservedBytes(0);
+        entity.setUpdatedAt(Instant.now(clock));
+        return quotaRepo.save(entity);
+    }
+
+    private TenantMediaQuota toQuota(TenantMediaQuotaEntity entity) {
+        return new TenantMediaQuota(
+                entity.getTenantId(),
+                entity.getMaxAssets(),
+                entity.getMaxStorageBytes(),
+                entity.getUsedAssets(),
+                entity.getUsedStorageBytes(),
+                entity.getReservedAssets(),
+                entity.getReservedBytes());
     }
 
     private ProductImageEntity toProductImageJpa(ProductImage pi) {

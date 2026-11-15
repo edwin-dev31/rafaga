@@ -4,6 +4,7 @@ import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.media.application.dto.AssociateBatch;
 import com.rafaga.backend.media.application.dto.ConfirmBatch;
 import com.rafaga.backend.media.application.dto.MediaAssetDto;
+import com.rafaga.backend.media.application.dto.MediaAdminSummary;
 import com.rafaga.backend.media.application.dto.ProductImageDto;
 import com.rafaga.backend.media.application.dto.UploadBatch;
 import com.rafaga.backend.media.application.port.out.*;
@@ -66,6 +67,50 @@ public class MediaService {
         this.imageProcessor = imageProcessor;
         this.catalogPort = catalogPort;
         this.clock = clock;
+    }
+
+    /**
+     * Produces an administrative summary for the tenant already established in
+     * {@link TenantContext}. Callers that cross tenants must set and restore
+     * that context themselves so PostgreSQL RLS remains effective.
+     */
+    @Transactional(readOnly = true)
+    public MediaAdminSummary getAdminSummary() {
+        String tenantId = TenantContext.getCurrentTenantId();
+        EnumMap<AssetStatus, Long> assetsByStatus = new EnumMap<>(AssetStatus.class);
+        for (AssetStatus status : AssetStatus.values()) {
+            assetsByStatus.put(status, 0L);
+        }
+
+        List<MediaAsset> failed = List.of();
+        List<MediaAsset> pendingCleanup = List.of();
+        for (AssetStatus status : AssetStatus.values()) {
+            List<MediaAsset> assets = repository.findByTenantAndStatus(tenantId, status);
+            assetsByStatus.put(status, (long) assets.size());
+            if (status == AssetStatus.FAILED) {
+                failed = assets;
+            } else if (status == AssetStatus.PENDING_DELETE) {
+                pendingCleanup = assets;
+            }
+        }
+
+        Comparator<MediaAsset> newestFirst = Comparator.comparing(MediaAsset::getUpdatedAt).reversed();
+        List<MediaAdminSummary.FailedAsset> recentFailures = failed.stream()
+            .sorted(newestFirst)
+            .limit(20)
+            .map(asset -> new MediaAdminSummary.FailedAsset(
+                asset.getId(), asset.getFailureCode(), asset.getFailureReason(), asset.getUpdatedAt()))
+            .toList();
+        List<MediaAdminSummary.PendingCleanupAsset> cleanupAssets = pendingCleanup.stream()
+            .sorted(Comparator.comparing(MediaAsset::getDeleteRequestedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())))
+            .limit(20)
+            .map(asset -> new MediaAdminSummary.PendingCleanupAsset(
+                asset.getId(), asset.getDeleteRequestedAt()))
+            .toList();
+
+        return new MediaAdminSummary(repository.getQuota(tenantId),
+            Map.copyOf(assetsByStatus), recentFailures, cleanupAssets);
     }
 
     // ---- Batch Upload Request ----
@@ -601,6 +646,22 @@ public class MediaService {
     public TenantMediaQuota getQuotaStats() {
         String tenantId = TenantContext.getCurrentTenantId();
         return repository.getQuota(tenantId);
+    }
+
+    @Transactional
+    public TenantMediaQuota updateQuotaLimits(long maxAssets, long maxStorageBytes) {
+        if (maxAssets < 0 || maxStorageBytes < 0) {
+            throw new MediaValidationException("MEDIA_INVALID_QUOTA_LIMITS",
+                    "Los límites de cuota no pueden ser negativos");
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        TenantMediaQuota current = repository.getQuota(tenantId);
+        if (maxAssets < current.effectiveUsedAssets()
+                || maxStorageBytes < current.effectiveUsedBytes()) {
+            throw new MediaValidationException("MEDIA_QUOTA_BELOW_CURRENT_USAGE",
+                    "Los límites no pueden quedar por debajo del uso y las reservas actuales");
+        }
+        return repository.updateQuotaLimits(tenantId, maxAssets, maxStorageBytes);
     }
 
     // ---- Helpers ----

@@ -27,6 +27,7 @@ class BusinessMigrationIsolationTest {
     private static final String PRODUCT_B = "00000000-0000-0000-0000-0000000000b1";
     private static final String CATEGORY_A = "00000000-0000-0000-0000-0000000000a2";
     private static final String CATEGORY_B = "00000000-0000-0000-0000-0000000000b2";
+    private static final String MEDIA_ASSET_A = "00000000-0000-0000-0000-0000000000f1";
 
     @BeforeAll
     static void migrateAndSeed() throws SQLException {
@@ -238,6 +239,45 @@ class BusinessMigrationIsolationTest {
                 protectedTables.add(result.getString(1));
             }
             assertThat(protectedTables).containsExactly("cart_items", "carts");
+        }
+    }
+
+    @Test
+    void isolatesMediaTablesAndForcesTheirRowLevelSecurity() throws SQLException {
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Statement statement = tenantA.createStatement()) {
+            statement.execute("INSERT INTO media_assets (id, tenant_id, upload_key, upload_expires_at, "
+                    + "reserved_bytes, declared_content_type, status, asset_type, created_at, updated_at) VALUES "
+                    + "('" + MEDIA_ASSET_A + "', 'tenant-a', 'tenants/tenant-a/uploads/a.jpg', NOW(), "
+                    + "0, 'image/jpeg', 'PENDING', 'PRODUCT', NOW(), NOW())");
+            statement.execute("INSERT INTO tenant_media_quotas (tenant_id, max_assets, max_storage_bytes, "
+                    + "used_assets, used_storage_bytes, reserved_assets, reserved_bytes, updated_at) VALUES "
+                    + "('tenant-a', 100, 1000000, 0, 0, 1, 0, NOW())");
+        }
+
+        try (Connection tenantA = applicationConnection("tenant-a");
+                Connection tenantB = applicationConnection("tenant-b")) {
+            assertThat(rowCount(tenantA, "media_assets")).isEqualTo(1);
+            assertThat(rowCount(tenantA, "tenant_media_quotas")).isEqualTo(1);
+            assertThat(rowCount(tenantB, "media_assets")).isZero();
+            assertThat(rowCount(tenantB, "tenant_media_quotas")).isZero();
+            try (Statement statement = tenantB.createStatement()) {
+                assertThat(statement.executeUpdate("UPDATE media_assets SET status = 'FAILED' "
+                        + "WHERE tenant_id = 'tenant-a'")).isZero();
+            }
+        }
+
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT relname FROM pg_class WHERE relname IN "
+                        + "('media_assets', 'product_images', 'tenant_media_quotas') "
+                        + "AND relrowsecurity AND relforcerowsecurity ORDER BY relname")) {
+            List<String> protectedTables = new ArrayList<>();
+            while (result.next()) {
+                protectedTables.add(result.getString(1));
+            }
+            assertThat(protectedTables).containsExactly("media_assets", "product_images", "tenant_media_quotas");
         }
     }
 
