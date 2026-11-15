@@ -7,6 +7,7 @@ import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.domain.model.TenantStatus;
 import java.time.Clock;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ public class ReservationExpiryScheduler {
     }
 
     @Scheduled(fixedDelay = 60_000)
+    @SchedulerLock(name = "inventory.reservation-expiry", lockAtMostFor = "PT5M")
     public void expireReservations() {
         for (TenantConfig tenant : tenants.findAll()) {
             if (tenant.status() != TenantStatus.ACTIVE) continue;

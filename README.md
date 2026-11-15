@@ -186,6 +186,8 @@ Local values can be overridden with environment variables.
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | — | Service-account client secret; provide it through the environment. |
 | `RAFAGA_IDENTITY_REGISTRATION_TOKEN` | — | Global secret required by `POST /api/public/auth/register`; use a long random value. |
 | `RAFAGA_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated static frontend origins accepted by CORS. |
+| `RAFAGA_TRUSTED_PROXY_CIDRS` | — | Comma-separated private Gateway CIDRs whose `X-Forwarded-*` headers may be trusted in production. |
+| `RAFAGA_RATE_LIMIT_*` | See `.env.example` | Production limits for login, registration, Media upload, guest cart mutations, and checkout. Redis shares counters; a stricter bounded local fallback applies if Redis is unavailable. |
 | `KEYCLOAK_ADMIN_USERNAME` | `admin` | Local Keycloak bootstrap administrator. |
 | `KEYCLOAK_ADMIN_PASSWORD` | — | Local Keycloak bootstrap administrator password. |
 

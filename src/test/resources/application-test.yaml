@@ -39,6 +39,10 @@ spring:
           time_zone: UTC
 
 rafaga:
+  scheduling:
+    enabled: false
+  rate-limit:
+    enabled: false
   web:
     allowed-origins: ${TEST_ALLOWED_ORIGINS:http://localhost:3000}
   identity:

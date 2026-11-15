@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 
 @Component
 public class MediaCleanupJob {
@@ -45,6 +46,7 @@ public class MediaCleanupJob {
     }
 
     @Scheduled(cron = "0 0 * * * *")
+    @SchedulerLock(name = "media.pending-delete-cleanup", lockAtMostFor = "PT10M")
     public void cleanupPendingDeletes() {
         Instant threshold = Instant.now(clock).minus(Duration.ofHours(gracePeriodHours));
         List<TenantConfig> tenants = tenantRegistry.findAll();
@@ -75,6 +77,7 @@ public class MediaCleanupJob {
     }
 
     @Scheduled(cron = "0 0 */6 * * *")
+    @SchedulerLock(name = "media.expired-pending-cleanup", lockAtMostFor = "PT10M")
     public void cleanupExpiredPending() {
         Instant threshold = Instant.now(clock);
         List<TenantConfig> tenants = tenantRegistry.findAll();
@@ -105,6 +108,7 @@ public class MediaCleanupJob {
     }
 
     @Scheduled(cron = "0 0 2 * * *")
+    @SchedulerLock(name = "media.orphan-reconciliation", lockAtMostFor = "PT30M")
     public void reconcileOrphans() {
         log.info("Starting R2-PostgreSQL reconciliation");
         List<TenantConfig> tenants = tenantRegistry.findAll();
@@ -130,6 +134,7 @@ public class MediaCleanupJob {
      * needed and should be removed from R2, then the uploadKey cleared.
      */
     @Scheduled(cron = "0 30 * * * *")
+    @SchedulerLock(name = "media.orphaned-staging-cleanup", lockAtMostFor = "PT10M")
     public void cleanupOrphanedStaging() {
         List<TenantConfig> tenants = tenantRegistry.findAll();
 

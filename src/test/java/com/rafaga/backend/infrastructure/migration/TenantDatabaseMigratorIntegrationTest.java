@@ -72,8 +72,8 @@ class TenantDatabaseMigratorIntegrationTest {
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
 
-        assertThat(historyCount(shared)).isEqualTo(14);
-        assertThat(historyCount(dedicated)).isEqualTo(14);
+        assertThat(historyCount(shared)).isEqualTo(15);
+        assertThat(historyCount(dedicated)).isEqualTo(15);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'dedicated-a'"))
                 .isEqualTo(1);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'tenant-demo'"))
@@ -100,8 +100,8 @@ class TenantDatabaseMigratorIntegrationTest {
         new DatabaseMigrationConfiguration()
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
-        assertThat(historyCount(shared)).isEqualTo(14);
-        assertThat(historyCount(dedicated)).isEqualTo(14);
+        assertThat(historyCount(shared)).isEqualTo(15);
+        assertThat(historyCount(dedicated)).isEqualTo(15);
         assertThat(flyway(dedicated).migrate().migrationsExecuted).isZero();
     }
 
@@ -142,7 +142,7 @@ class TenantDatabaseMigratorIntegrationTest {
             }
             assertThat(routing.dedicatedDataSources()).containsKey("tenant-dedicated-a");
         }
-        assertThat(historyCount(dedicated)).isEqualTo(14);
+        assertThat(historyCount(dedicated)).isEqualTo(15);
     }
 
     @Test
@@ -174,12 +174,12 @@ class TenantDatabaseMigratorIntegrationTest {
                 .locations("classpath:db/migration", "classpath:db/dev-migration")
                 .load();
         withDevSeed.migrate();
-        assertThat(historyCount(shared)).isEqualTo(16);
+        assertThat(historyCount(shared)).isEqualTo(17);
 
         Flyway productionLocations = flyway(shared);
         assertThat(MigrationLocationCompatibility.includePreviouslyAppliedDevSeed(productionLocations)
                 .migrate().migrationsExecuted).isZero();
-        assertThat(historyCount(shared)).isEqualTo(16);
+        assertThat(historyCount(shared)).isEqualTo(17);
     }
 
     private TenantDatabaseMigrator migrator(String... locations) {

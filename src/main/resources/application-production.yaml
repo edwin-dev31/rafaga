@@ -57,12 +57,25 @@ management:
       enabled: true
 
 rafaga:
+  rate-limit:
+    enabled: ${RAFAGA_RATE_LIMIT_ENABLED:true}
+    window: ${RAFAGA_RATE_LIMIT_WINDOW:1m}
+    login-per-window: ${RAFAGA_RATE_LIMIT_LOGIN_PER_WINDOW:10}
+    registration-per-window: ${RAFAGA_RATE_LIMIT_REGISTRATION_PER_WINDOW:3}
+    media-upload-per-window: ${RAFAGA_RATE_LIMIT_MEDIA_UPLOAD_PER_WINDOW:12}
+    media-confirmation-per-window: ${RAFAGA_RATE_LIMIT_MEDIA_CONFIRMATION_PER_WINDOW:24}
+    guest-cart-mutation-per-window: ${RAFAGA_RATE_LIMIT_GUEST_CART_MUTATION_PER_WINDOW:30}
+    checkout-per-window: ${RAFAGA_RATE_LIMIT_CHECKOUT_PER_WINDOW:8}
+    order-creation-per-window: ${RAFAGA_RATE_LIMIT_ORDER_CREATION_PER_WINDOW:12}
+    max-fallback-entries: ${RAFAGA_RATE_LIMIT_MAX_FALLBACK_ENTRIES:10000}
   tenant:
     internal-header:
       enabled: false
       trusted-cidrs: []
   web:
     allowed-origins: ${RAFAGA_ALLOWED_ORIGINS}
+    trusted-proxy:
+      cidrs: ${RAFAGA_TRUSTED_PROXY_CIDRS:}
   identity:
     registration-token: ${RAFAGA_IDENTITY_REGISTRATION_TOKEN}
     keycloak:
