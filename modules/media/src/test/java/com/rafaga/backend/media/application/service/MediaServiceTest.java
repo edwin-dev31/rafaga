@@ -181,7 +181,7 @@ class MediaServiceTest {
 
         assertThat(response.summary().failed()).isEqualTo(1);
         assertThat(response.results().get(0).error().code()).isEqualTo("MEDIA_STAGING_MISSING");
-        verify(repository).releaseQuotaReservation(TENANT_ID, 5_242_880L);
+        verify(repository).failPendingAsset(assetId, TENANT_ID, "Staging object not found");
     }
 
     @Test
@@ -199,7 +199,7 @@ class MediaServiceTest {
 
         assertThat(response.summary().failed()).isEqualTo(1);
         assertThat(response.results().get(0).error().code()).isEqualTo("MEDIA_INPUT_TOO_LARGE");
-        verify(repository).releaseQuotaReservation(TENANT_ID, 5_242_880L);
+        verify(repository).failPendingAsset(assetId, TENANT_ID, "Input size exceeds limit");
         verify(objectStorage).delete("upload/key");
     }
 

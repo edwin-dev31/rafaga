@@ -16,7 +16,9 @@ import java.util.List;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
@@ -37,7 +39,9 @@ public class R2ObjectStorage implements ObjectStorage {
         @Value("${media.r2.account-id:}") String accountId,
         @Value("${media.r2.access-key-id:}") String accessKeyId,
         @Value("${media.r2.secret-access-key:}") String secretAccessKey,
-        @Value("${media.r2.bucket:rafaga-media}") String bucket) {
+        @Value("${media.r2.bucket:rafaga-media}") String bucket,
+        @Value("${media.r2.connect-timeout:2s}") Duration connectTimeout,
+        @Value("${media.r2.read-timeout:10s}") Duration readTimeout) {
 
         this.bucket = bucket;
 
@@ -53,11 +57,21 @@ public class R2ObjectStorage implements ObjectStorage {
         String endpoint = "https://" + accountId + ".r2.cloudflarestorage.com";
         StaticCredentialsProvider credentials = StaticCredentialsProvider.create(
             AwsBasicCredentials.create(accessKeyId, secretAccessKey));
+        ClientOverrideConfiguration clientOverrideConfiguration = ClientOverrideConfiguration.builder()
+            .apiCallTimeout(readTimeout)
+            .apiCallAttemptTimeout(readTimeout)
+            .build();
+        UrlConnectionHttpClient httpClient = UrlConnectionHttpClient.builder()
+            .connectionTimeout(connectTimeout)
+            .socketTimeout(readTimeout)
+            .build();
 
         this.s3Client = S3Client.builder()
             .region(Region.US_EAST_1)
             .endpointOverride(URI.create(endpoint))
             .credentialsProvider(credentials)
+            .httpClient(httpClient)
+            .overrideConfiguration(clientOverrideConfiguration)
             .serviceConfiguration(config -> config
                 .checksumValidationEnabled(false)
             )

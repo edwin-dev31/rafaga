@@ -61,6 +61,8 @@ rafaga:
       client-secret: ${KEYCLOAK_CLIENT_SECRET:rafaga_dev_client_secret}
       admin-client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:rafaga-backend-admin}
       admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:rafaga_dev_admin_client_secret}
+      connect-timeout: ${KEYCLOAK_CONNECT_TIMEOUT:2s}
+      read-timeout: ${KEYCLOAK_READ_TIMEOUT:5s}
 
 media:
   r2:
@@ -69,6 +71,8 @@ media:
     secret-access-key: ${MEDIA_R2_SECRET_ACCESS_KEY:}
     bucket: ${MEDIA_R2_BUCKET:rafaga-media}
     public-base-url: ${MEDIA_R2_PUBLIC_BASE_URL:https://media.rafaga.com}
+    connect-timeout: ${MEDIA_R2_CONNECT_TIMEOUT:2s}
+    read-timeout: ${MEDIA_R2_READ_TIMEOUT:10s}
 
 springdoc:
   api-docs:

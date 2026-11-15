@@ -19,11 +19,15 @@ public interface MediaRepository {
     List<MediaAsset> findByTenantAndStatus(String tenantId, AssetStatus status);
     List<MediaAsset> findPendingExpired(Instant threshold);
     List<MediaAsset> findPendingDeletePastGrace(Instant graceThreshold);
-    void updateStatus(UUID id, AssetStatus status, String failureReason);
+    /**
+     * Transitions one PENDING asset to FAILED and releases its quota exactly
+     * once. Returns false when another request or recovery attempt already
+     * completed the transition.
+     */
+    boolean failPendingAsset(UUID id, String tenantId, String failureReason);
     TenantMediaQuota getQuota(String tenantId);
     TenantMediaQuota updateQuotaLimits(String tenantId, long maxAssets, long maxStorageBytes);
     boolean reserveQuota(String tenantId, long bytes);
-    void releaseQuotaReservation(String tenantId, long bytes);
     void commitQuotaUsage(String tenantId, long reservedBytes, long actualBytes);
     ProductImage saveProductImage(ProductImage productImage);
     Optional<ProductImage> findProductImage(UUID id, String tenantId);

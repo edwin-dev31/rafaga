@@ -5,9 +5,16 @@ spring:
     default: dev
   main:
     allow-bean-definition-overriding: true
+  lifecycle:
+    timeout-per-shutdown-phase: ${RAFAGA_SHUTDOWN_TIMEOUT:30s}
 
 server:
   port: ${RAFAGA_SERVER_PORT:3117}
+  shutdown: graceful
+  max-http-request-header-size: ${RAFAGA_MAX_HTTP_REQUEST_HEADER_SIZE:16KB}
+  tomcat:
+    max-http-form-post-size: ${RAFAGA_MAX_HTTP_FORM_POST_SIZE:1MB}
+    max-swallow-size: ${RAFAGA_MAX_HTTP_SWALLOW_SIZE:1MB}
 
 management:
   endpoints:
@@ -40,6 +47,9 @@ scalar:
   enabled: false
 
 rafaga:
+  web:
+    request-limits:
+      max-content-length: ${RAFAGA_MAX_REQUEST_CONTENT_LENGTH:1MB}
   tenant:
     internal-header:
       enabled: false

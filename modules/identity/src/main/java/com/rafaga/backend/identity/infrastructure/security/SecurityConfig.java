@@ -1,6 +1,7 @@
 package com.rafaga.backend.identity.infrastructure.security;
 
 import com.rafaga.backend.identity.infrastructure.web.CorsProperties;
+import com.rafaga.backend.identity.infrastructure.keycloak.KeycloakProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -19,6 +20,13 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
@@ -29,6 +37,22 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
+    @Bean
+    JwtDecoder jwtDecoder(KeycloakProperties properties,
+            @org.springframework.beans.factory.annotation.Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
+        if (properties.getIssuerUri() == null || properties.getIssuerUri().isBlank()
+                || properties.getClientId() == null || properties.getClientId().isBlank()) {
+            throw new IllegalStateException("Keycloak issuer URI and client ID must be configured for JWT validation");
+        }
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        OAuth2TokenValidator<Jwt> issuer = JwtValidators.createDefaultWithIssuer(properties.getIssuerUri());
+        OAuth2TokenValidator<Jwt> audience = jwt -> jwt.getAudience().contains(properties.getClientId())
+                ? OAuth2TokenValidatorResult.success()
+                : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "JWT audience is invalid", null));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuer, audience));
+        return decoder;
+    }
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http

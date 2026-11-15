@@ -37,24 +37,25 @@ public interface MediaAssetRepository extends JpaRepository<MediaAssetEntity, UU
                      @Param("maxStorageBytes") long maxStorageBytes,
                      @Param("now") Instant now);
 
-    /**
-     * Release quota reservation atomically, but only if there is at least one
-     * PENDING asset for the tenant. This prevents double-release: if the asset
-     * was already committed (READY), the reservation has been consumed by
-     * commitQuotaUsage and should not be released again.
-     */
     @Modifying
     @Query("UPDATE TenantMediaQuotaEntity q SET " +
            "q.reservedAssets = GREATEST(q.reservedAssets - 1, 0), " +
            "q.reservedBytes = GREATEST(q.reservedBytes - :bytes, 0), " +
            "q.updatedAt = :now " +
            "WHERE q.tenantId = :tenantId " +
-           "AND q.reservedAssets > 0 " +
-           "AND EXISTS (SELECT 1 FROM MediaAssetEntity a " +
-           "WHERE a.tenantId = :tenantId AND a.status = 'PENDING')")
-    void releaseQuotaReservation(@Param("tenantId") String tenantId,
-                                 @Param("bytes") long bytes,
-                                 @Param("now") Instant now);
+           "AND q.reservedAssets > 0")
+    int releaseQuotaReservation(@Param("tenantId") String tenantId,
+                                @Param("bytes") long bytes,
+                                @Param("now") Instant now);
+
+    @Modifying
+    @Query("UPDATE MediaAssetEntity a SET a.status = 'FAILED', " +
+           "a.failureReason = :failureReason, a.updatedAt = :now " +
+           "WHERE a.id = :id AND a.tenantId = :tenantId AND a.status = 'PENDING'")
+    int failPendingAsset(@Param("id") UUID id,
+                         @Param("tenantId") String tenantId,
+                         @Param("failureReason") String failureReason,
+                         @Param("now") Instant now);
 
     @Modifying
     @Query("UPDATE TenantMediaQuotaEntity q SET " +

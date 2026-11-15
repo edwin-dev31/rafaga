@@ -156,8 +156,7 @@ class MediaCleanupJobTest {
         job.cleanupExpiredPending();
 
         verify(objectStorage).delete("upload/key");
-        verify(repository).releaseQuotaReservation("tenant-1", 5_242_880L);
-        verify(repository).updateStatus(assetId, AssetStatus.FAILED, "Upload URL expired");
+        verify(repository).failPendingAsset(assetId, "tenant-1", "Upload URL expired");
     }
 
     @Test
@@ -181,8 +180,7 @@ class MediaCleanupJobTest {
         job.cleanupExpiredPending();
 
         verify(objectStorage, never()).delete(anyString());
-        verify(repository).releaseQuotaReservation("tenant-1", 5_242_880L);
-        verify(repository).updateStatus(assetId, AssetStatus.FAILED, "Upload URL expired");
+        verify(repository).failPendingAsset(assetId, "tenant-1", "Upload URL expired");
     }
 
     @Test

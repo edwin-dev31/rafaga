@@ -1,6 +1,7 @@
 package com.rafaga.backend.identity.infrastructure.health;
 
 import com.rafaga.backend.identity.infrastructure.keycloak.KeycloakProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.http.ResponseEntity;
@@ -12,9 +13,10 @@ public class KeycloakHealthIndicator implements HealthIndicator {
     private final KeycloakProperties properties;
     private final RestClient restClient;
 
-    public KeycloakHealthIndicator(KeycloakProperties properties) {
+    public KeycloakHealthIndicator(KeycloakProperties properties,
+            @Qualifier("keycloakRestClient") RestClient restClient) {
         this.properties = properties;
-        this.restClient = RestClient.create();
+        this.restClient = restClient;
     }
 
     @Override

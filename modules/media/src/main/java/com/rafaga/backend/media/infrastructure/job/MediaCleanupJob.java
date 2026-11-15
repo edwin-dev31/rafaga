@@ -3,7 +3,6 @@ package com.rafaga.backend.media.infrastructure.job;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.media.application.port.out.MediaRepository;
 import com.rafaga.backend.media.application.port.out.ObjectStorage;
-import com.rafaga.backend.media.domain.model.AssetStatus;
 import com.rafaga.backend.media.domain.model.MediaAsset;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
@@ -92,9 +91,9 @@ public class MediaCleanupJob {
                         if (asset.getUploadKey() != null && objectStorage.exists(asset.getUploadKey())) {
                             objectStorage.delete(asset.getUploadKey());
                         }
-                        repository.releaseQuotaReservation(asset.getTenantId(), asset.getReservedBytes());
-                        repository.updateStatus(asset.getId(), AssetStatus.FAILED, "Upload URL expired");
-                        log.info("Cleaned up expired pending asset {} for tenant {}", asset.getId(), tenant.tenantId());
+                        if (repository.failPendingAsset(asset.getId(), asset.getTenantId(), "Upload URL expired")) {
+                            log.info("Cleaned up expired pending asset {} for tenant {}", asset.getId(), tenant.tenantId());
+                        }
                     } catch (Exception e) {
                         log.error("Failed to clean up expired asset {}: {}", asset.getId(), e.getMessage());
                     }

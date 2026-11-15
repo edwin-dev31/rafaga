@@ -49,6 +49,17 @@
             "id.token.claim": "true",
             "userinfo.token.claim": "true"
           }
+        },
+        {
+          "name": "backend-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "${KEYCLOAK_CLIENT_ID}",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
         }
       ]
     },

@@ -113,6 +113,15 @@ public class StockService {
 
     @Transactional
     public ReservationView expireReservation(UUID reservationId) {
+        String tenantId = TenantContext.getCurrentTenantId();
+        StockReservation reservation = store.lockReservation(tenantId, reservationId)
+                .orElseThrow(() -> new StockNotFoundException("Reservation not found"));
+        // A second scheduler can observe a stale candidate list after a lock
+        // expiry or process recovery. The row lock and terminal state make the
+        // retry a no-op rather than releasing stock twice.
+        if (reservation.getStatus() != com.rafaga.backend.inventory.domain.model.ReservationStatus.ACTIVE) {
+            return ReservationView.from(reservation);
+        }
         return release(reservationId, true);
     }
 

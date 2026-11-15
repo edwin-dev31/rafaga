@@ -182,16 +182,19 @@ Local values can be overridden with environment variables.
 | `KEYCLOAK_ISSUER_URI` | Local Keycloak realm URL | Keycloak issuer and OIDC endpoints. |
 | `KEYCLOAK_CLIENT_ID` | — | Confidential client ID used only for direct Keycloak authentication. |
 | `KEYCLOAK_CLIENT_SECRET` | — | Confidential client secret; provide it through the environment, never the repository. |
+| `KEYCLOAK_CONNECT_TIMEOUT` / `KEYCLOAK_READ_TIMEOUT` | `2s` / `5s` | Bounded connection and response times for Keycloak login, provisioning, and health calls. |
 | `KEYCLOAK_ADMIN_CLIENT_ID` | `rafaga-backend-admin` | Service-account client used only by the backend to provision users. |
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | — | Service-account client secret; provide it through the environment. |
 | `RAFAGA_IDENTITY_REGISTRATION_TOKEN` | — | Global secret required by `POST /api/public/auth/register`; use a long random value. |
 | `RAFAGA_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated static frontend origins accepted by CORS. |
 | `RAFAGA_TRUSTED_PROXY_CIDRS` | — | Comma-separated private Gateway CIDRs whose `X-Forwarded-*` headers may be trusted in production. |
+| `RAFAGA_MAX_REQUEST_CONTENT_LENGTH` | `1MB` | Maximum declared JSON/API body; direct browser image uploads do not pass through the backend. |
+| `RAFAGA_SHUTDOWN_TIMEOUT` | `30s` | Maximum graceful-shutdown phase duration. |
 | `RAFAGA_RATE_LIMIT_*` | See `.env.example` | Production limits for login, registration, Media upload, guest cart mutations, and checkout. Redis shares counters; a stricter bounded local fallback applies if Redis is unavailable. |
 | `KEYCLOAK_ADMIN_USERNAME` | `admin` | Local Keycloak bootstrap administrator. |
 | `KEYCLOAK_ADMIN_PASSWORD` | — | Local Keycloak bootstrap administrator password. |
 
-The `dev` profile targets local PostgreSQL, Redis and Keycloak, enables debug logs for tenant resolution and Spring Modulith, and enables the API documentation UI. The Gradle `test` profile uses the isolated PostgreSQL/Redis compose stack; some datasource-routing tests additionally start their own Testcontainers database. The `production` profile requires all database, Keycloak, CORS, registration-token, and Redis cluster variables above. It uses the restricted shared-database role for application traffic, validates Flyway migrations, uses a 50-connection Hikari pool, and never enables internal tenant-header resolution.
+The `dev` profile targets local PostgreSQL, Redis and Keycloak, enables debug logs for tenant resolution and Spring Modulith, and enables the API documentation UI. The Gradle `test` profile uses the isolated PostgreSQL/Redis compose stack; some datasource-routing tests additionally start their own Testcontainers database. The `production` profile requires all database, Keycloak, CORS, registration-token, and Redis cluster variables above. It uses the restricted shared-database role for application traffic, validates Flyway migrations, uses a 50-connection Hikari pool, enables graceful shutdown, validates JWT issuer plus client audience, and never enables internal tenant-header resolution.
 
 Dedicated-database credentials are never stored in `TenantConfig`. `TenantDatabaseCredentialsProvider` is the port used to integrate the appropriate secrets manager.
 The `postgres-role-setup` services create or update the restricted application role and grant table access after PostgreSQL starts. Run them again after changing database credentials. PostgreSQL row-level security is enforced for application queries; Flyway uses the separate administrator connection.

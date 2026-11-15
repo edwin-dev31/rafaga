@@ -53,3 +53,5 @@ rafaga:
       client-secret: ${TEST_KEYCLOAK_CLIENT_SECRET:rafaga_test_client_secret}
       admin-client-id: ${TEST_KEYCLOAK_ADMIN_CLIENT_ID:rafaga-backend-admin}
       admin-client-secret: ${TEST_KEYCLOAK_ADMIN_CLIENT_SECRET:rafaga_test_admin_client_secret}
+      connect-timeout: ${TEST_KEYCLOAK_CONNECT_TIMEOUT:2s}
+      read-timeout: ${TEST_KEYCLOAK_READ_TIMEOUT:5s}

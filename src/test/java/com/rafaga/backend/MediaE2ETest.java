@@ -158,7 +158,7 @@ class MediaE2ETest {
     }
 
     @Test
-    void cleanupRemovesAnExpiredStagingObjectAndReleasesItsQuotaReservation() {
+    void cleanupRecoversAnExpiredStagingObjectWithoutReleasingQuotaTwice() {
         String tenantId = UUID.randomUUID().toString();
         String uploadKey = "tenants/" + tenantId + "/uploads/expired.jpg";
         UUID assetId = UUID.randomUUID();
@@ -170,6 +170,9 @@ class MediaE2ETest {
             objectStorage.upload(uploadKey, new byte[] {1, 2, 3}, "image/jpeg");
         });
 
+        mediaCleanupJob.cleanupExpiredPending();
+        // Simulate the next run after a worker crash or lock recovery. The
+        // conditional PENDING -> FAILED transition makes this a no-op.
         mediaCleanupJob.cleanupExpiredPending();
 
         withinTenant(tenantId, () -> {

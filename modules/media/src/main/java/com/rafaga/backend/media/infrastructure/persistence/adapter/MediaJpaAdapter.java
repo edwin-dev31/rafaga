@@ -96,15 +96,19 @@ public class MediaJpaAdapter implements MediaRepository {
 
     @Override
     @Transactional
-    public void updateStatus(UUID id, AssetStatus status, String failureReason) {
-        assetRepo.findById(id).ifPresent(entity -> {
-            entity.setStatus(status.name());
-            if (failureReason != null) {
-                entity.setFailureReason(failureReason);
-            }
-            entity.setUpdatedAt(Instant.now(clock));
-            assetRepo.save(entity);
-        });
+    public boolean failPendingAsset(UUID id, String tenantId, String failureReason) {
+        MediaAssetEntity asset = assetRepo.findById(id)
+                .filter(entity -> entity.getTenantId().equals(tenantId))
+                .orElse(null);
+        if (asset == null) {
+            return false;
+        }
+        Instant now = Instant.now(clock);
+        if (assetRepo.failPendingAsset(id, tenantId, failureReason, now) == 0) {
+            return false;
+        }
+        assetRepo.releaseQuotaReservation(tenantId, asset.getReservedBytes(), now);
+        return true;
     }
 
     @Override
@@ -132,12 +136,6 @@ public class MediaJpaAdapter implements MediaRepository {
         int updated = assetRepo.reserveQuota(tenantId, bytes, entity.getMaxAssets(),
             entity.getMaxStorageBytes(), now);
         return updated > 0;
-    }
-
-    @Override
-    @Transactional
-    public void releaseQuotaReservation(String tenantId, long bytes) {
-        assetRepo.releaseQuotaReservation(tenantId, bytes, Instant.now(clock));
     }
 
     @Override

@@ -195,8 +195,7 @@ public class MediaService {
 
             try {
                 if (!objectStorage.exists(asset.getUploadKey())) {
-                    repository.releaseQuotaReservation(tenantId, asset.getReservedBytes());
-                    repository.updateStatus(assetId, AssetStatus.FAILED, "Staging object not found");
+                    repository.failPendingAsset(assetId, tenantId, "Staging object not found");
                     results.add(new ConfirmBatch.ItemResponse(assetId, "FAILED", null,
                         new ConfirmBatch.Error("MEDIA_STAGING_MISSING", "El objeto de staging no existe", null, null)));
                     failed++;
@@ -206,8 +205,7 @@ public class MediaService {
                 ObjectStorage.Metadata metadata = objectStorage.getMetadata(asset.getUploadKey());
                 if (metadata.sizeBytes() > maxInputSizeBytes) {
                     objectStorage.delete(asset.getUploadKey());
-                    repository.releaseQuotaReservation(tenantId, asset.getReservedBytes());
-                    repository.updateStatus(assetId, AssetStatus.FAILED, "Input size exceeds limit");
+                    repository.failPendingAsset(assetId, tenantId, "Input size exceeds limit");
                     results.add(new ConfirmBatch.ItemResponse(assetId, "FAILED", null,
                         new ConfirmBatch.Error("MEDIA_INPUT_TOO_LARGE",
                             "El archivo supera el límite de entrada de " + maxInputSizeBytes + " bytes", null, null)));
@@ -223,8 +221,7 @@ public class MediaService {
 
                     if (!processingResult.success()) {
                         objectStorage.delete(asset.getUploadKey());
-                        repository.releaseQuotaReservation(tenantId, asset.getReservedBytes());
-                        repository.updateStatus(assetId, AssetStatus.FAILED, processingResult.failureReason());
+                        repository.failPendingAsset(assetId, tenantId, processingResult.failureReason());
                         results.add(new ConfirmBatch.ItemResponse(assetId, "FAILED", null,
                             new ConfirmBatch.Error(processingResult.failureCode(),
                                 processingResult.failureReason(),
@@ -275,12 +272,7 @@ public class MediaService {
                             // Log but don't mask the original exception
                         }
                     }
-                    // Only release reservation if the asset is still PENDING
-                    // (i.e., we haven't already committed quota usage)
-                    if (asset.getStatus() == AssetStatus.PENDING) {
-                        repository.releaseQuotaReservation(tenantId, asset.getReservedBytes());
-                    }
-                    repository.updateStatus(assetId, AssetStatus.FAILED, e.getMessage());
+                    repository.failPendingAsset(assetId, tenantId, e.getMessage());
                     results.add(new ConfirmBatch.ItemResponse(assetId, "FAILED", null,
                         new ConfirmBatch.Error("MEDIA_PROCESSING_ERROR", e.getMessage(), null, null)));
                     failed++;
@@ -288,7 +280,7 @@ public class MediaService {
             } catch (MediaValidationException e) {
                 throw e;
             } catch (Exception e) {
-                repository.updateStatus(assetId, AssetStatus.FAILED, e.getMessage());
+                repository.failPendingAsset(assetId, tenantId, e.getMessage());
                 results.add(new ConfirmBatch.ItemResponse(assetId, "FAILED", null,
                     new ConfirmBatch.Error("MEDIA_PROCESSING_ERROR", e.getMessage(), null, null)));
                 failed++;
@@ -581,8 +573,7 @@ public class MediaService {
         // If the asset is still PENDING, confirm it now (within the same transaction)
         if (asset.getStatus() == AssetStatus.PENDING) {
             if (!objectStorage.exists(asset.getUploadKey())) {
-                repository.releaseQuotaReservation(tenantId, asset.getReservedBytes());
-                repository.updateStatus(assetId, AssetStatus.FAILED, "Staging object not found");
+                repository.failPendingAsset(assetId, tenantId, "Staging object not found");
                 throw new MediaValidationException("MEDIA_STAGING_MISSING",
                     "El objeto de staging no existe para el asset de branding");
             }
@@ -592,8 +583,7 @@ public class MediaService {
 
                 if (!processingResult.success()) {
                     objectStorage.delete(asset.getUploadKey());
-                    repository.releaseQuotaReservation(tenantId, asset.getReservedBytes());
-                    repository.updateStatus(assetId, AssetStatus.FAILED, processingResult.failureReason());
+                    repository.failPendingAsset(assetId, tenantId, processingResult.failureReason());
                     throw new MediaValidationException(processingResult.failureCode(),
                         processingResult.failureReason());
                 }
@@ -614,10 +604,7 @@ public class MediaService {
             } catch (MediaValidationException e) {
                 throw e;
             } catch (Exception e) {
-                if (asset.getStatus() == AssetStatus.PENDING) {
-                    repository.releaseQuotaReservation(tenantId, asset.getReservedBytes());
-                }
-                repository.updateStatus(assetId, AssetStatus.FAILED, e.getMessage());
+                repository.failPendingAsset(assetId, tenantId, e.getMessage());
                 throw new MediaValidationException("MEDIA_PROCESSING_ERROR", e.getMessage());
             }
         } else if (asset.getStatus() != AssetStatus.READY) {

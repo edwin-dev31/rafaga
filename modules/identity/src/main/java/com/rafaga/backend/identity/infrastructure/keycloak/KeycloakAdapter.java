@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -31,10 +32,11 @@ public class KeycloakAdapter implements AuthenticationPort {
     private final ObjectProvider<JwtDecoder> jwtDecoderProvider;
     private final RestClient restClient;
 
-    public KeycloakAdapter(KeycloakProperties properties, ObjectProvider<JwtDecoder> jwtDecoderProvider) {
+    public KeycloakAdapter(KeycloakProperties properties, ObjectProvider<JwtDecoder> jwtDecoderProvider,
+            @Qualifier("keycloakRestClient") RestClient restClient) {
         this.properties = properties;
         this.jwtDecoderProvider = jwtDecoderProvider;
-        this.restClient = RestClient.create();
+        this.restClient = restClient;
     }
 
     @Override

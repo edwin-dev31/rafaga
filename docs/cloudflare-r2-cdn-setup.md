@@ -241,12 +241,18 @@ MEDIA_R2_ACCESS_KEY_ID=<ACCESS_KEY_ID>
 MEDIA_R2_SECRET_ACCESS_KEY=<SECRET_ACCESS_KEY>
 MEDIA_R2_BUCKET=<BUCKET_NAME>
 MEDIA_R2_PUBLIC_BASE_URL=https://<MEDIA_HOST>
+MEDIA_R2_CONNECT_TIMEOUT=2s
+MEDIA_R2_READ_TIMEOUT=10s
 ```
 
 Distinguish the two URLs:
 
 - **S3 endpoint:** `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` — used by the backend for object operations.
 - **Public CDN base URL:** `https://<MEDIA_HOST>` — used to serve images to clients.
+
+The backend bounds R2 connection and operation time with `MEDIA_R2_CONNECT_TIMEOUT`
+and `MEDIA_R2_READ_TIMEOUT`. Keep both values finite; a temporary R2 outage must
+fail a request rather than consume servlet threads indefinitely.
 
 The backend should construct public URLs from object keys and correctly encode any special characters in paths.
 
