@@ -10,7 +10,8 @@ permissions:
   packages: write
 
 jobs:
-  verify:
+  unit-tests:
+    name: Unit & Architecture Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,15 +19,108 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
+          cache: gradle
+      - name: Run module unit tests
+        run: >-
+          ./gradlew --no-daemon --console=plain
+          :modules:common:test
+          :modules:cart:test
+          :modules:catalog:test
+          :modules:identity:test
+          :modules:inventory:test
+          :modules:media:test
+          :modules:orders:test
+      - name: Run tenant unit tests
+        run: >-
+          ./gradlew --no-daemon --console=plain :modules:tenant:test
+          --tests "com.rafaga.backend.tenant.application.*"
+          --tests "com.rafaga.backend.tenant.domain.*"
+          --tests "com.rafaga.backend.tenant.infrastructure.cache.RedisCacheErrorHandlerTest"
+          --tests "com.rafaga.backend.tenant.infrastructure.cache.TenantScopedCacheKeyGeneratorTest"
+          --tests "com.rafaga.backend.tenant.infrastructure.config.*"
+          --tests "com.rafaga.backend.tenant.infrastructure.health.*"
+          --tests "com.rafaga.backend.tenant.infrastructure.persistence.JpaTenantRegistryTest"
+          --tests "com.rafaga.backend.tenant.infrastructure.persistence.TenantAwareRoutingDataSourceTest"
+          --tests "com.rafaga.backend.tenant.infrastructure.persistence.TenantConnectionCustomizerTest"
+          --tests "com.rafaga.backend.tenant.infrastructure.web.*"
+      - name: Run root unit & contract tests
+        run: >-
+          ./gradlew --no-daemon --console=plain :test
+          --tests "com.rafaga.backend.infrastructure.cart.*"
+          --tests "com.rafaga.backend.infrastructure.config.*"
+          --tests "com.rafaga.backend.infrastructure.web.*"
+          --tests "com.rafaga.backend.ScheduledJobLockConfigurationTest"
+          --tests "com.rafaga.backend.TenantControlPlaneArchitectureTest"
+
+  integration-tests:
+    name: Integration & Isolation Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
       - name: Start test infrastructure
-        run: docker compose -f compose.test.yaml up -d --wait
+        run: docker compose -f compose.test.yaml up -d --wait postgres-test redis-test keycloak-test
       - name: Configure restricted database role
         run: docker compose -f compose.test.yaml run --rm postgres-role-setup-test
-      - name: Run full test suite
-        run: ./gradlew --no-daemon --console=plain test
+      - name: Run tenant module integration tests
+        run: >-
+          ./gradlew --no-daemon --console=plain :modules:tenant:test
+          --tests "*IntegrationTest"
+      - name: Run platform integration & isolation tests
+        run: >-
+          ./gradlew --no-daemon --console=plain :test
+          --tests "com.rafaga.backend.BackendApplicationTests"
+          --tests "com.rafaga.backend.ModuleArchitectureTest"
+          --tests "com.rafaga.backend.ActuatorHealthEndpointTest"
+          --tests "com.rafaga.backend.AuthenticationEndpointsIntegrationTest"
+          --tests "com.rafaga.backend.RoleAuthorizationIntegrationTest"
+          --tests "com.rafaga.backend.EventPropagationIntegrationTest"
+          --tests "com.rafaga.backend.FeatureFlagEnforcementIntegrationTest"
+          --tests "com.rafaga.backend.TenantRoutingControlPlaneIntegrationTest"
+          --tests "com.rafaga.backend.StorefrontMultiTenantIsolationTest"
+          --tests "com.rafaga.backend.BusinessMigrationIsolationTest"
+          --tests "com.rafaga.backend.infrastructure.migration.TenantDatabaseMigratorIntegrationTest"
       - name: Stop test infrastructure
         if: always()
         run: docker compose -f compose.test.yaml down -v
+
+  e2e-tests:
+    name: API & E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: Start test infrastructure
+        run: docker compose -f compose.test.yaml up -d --wait postgres-test redis-test keycloak-test
+      - name: Configure restricted database role
+        run: docker compose -f compose.test.yaml run --rm postgres-role-setup-test
+      - name: Run API & E2E test suites
+        run: >-
+          ./gradlew --no-daemon --console=plain :test
+          --tests "com.rafaga.backend.CatalogApiIntegrationTest"
+          --tests "com.rafaga.backend.InventoryApiIntegrationTest"
+          --tests "com.rafaga.backend.CartApiIntegrationTest"
+          --tests "com.rafaga.backend.OrderApiIntegrationTest"
+          --tests "com.rafaga.backend.MediaE2ETest"
+      - name: Stop test infrastructure
+        if: always()
+        run: docker compose -f compose.test.yaml down -v
+
+  verify:
+    name: verify
+    needs: [unit-tests, integration-tests, e2e-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All test suites passed
+        run: echo "Unit, integration, isolation, and E2E test suites passed."
 
   image:
     needs: verify

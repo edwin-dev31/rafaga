@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -22,6 +24,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+@Execution(ExecutionMode.SAME_THREAD)
 class TenantRoutingControlPlaneIntegrationTest extends TenantIsolationTestBase {
     private static final String DIRECTORY_TOKEN = "rafaga_test_directory_internal_token";
 
@@ -47,17 +50,22 @@ class TenantRoutingControlPlaneIntegrationTest extends TenantIsolationTestBase {
 
     @Test
     void newDomainActivatesViaVersionedDirectoryRefreshWithoutDisruptingExistingTenants() throws Exception {
-        String newHost = "store-" + UUID.randomUUID().toString().substring(0, 8) + ".controlplane.test";
-        String frontendOrigin = "https://ui-" + UUID.randomUUID().toString().substring(0, 8) + ".controlplane.test";
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String controlPlaneTenantId = "cp-tenant-" + suffix;
+        String initialHost = "initial-" + suffix + ".controlplane.test";
+        tenants.register(isolationTenant(controlPlaneTenantId, initialHost));
+
+        String newHost = "store-" + suffix + ".controlplane.test";
+        String frontendOrigin = "https://ui-" + suffix + ".controlplane.test";
 
         TenantDirectorySnapshot baseline = fetchDirectory(-1);
         assertThat(baseline.activeEntries())
                 .extracting(entry -> entry.hostname())
-                .contains(HOST_A, HOST_B)
+                .contains(HOST_A, HOST_B, initialHost)
                 .doesNotContain(newHost);
 
         // Request new domain: starts in REQUESTED, not yet routable or resolvable.
-        mockMvc.perform(post("/api/admin/tenants/{tenantId}/domains", TENANT_A)
+        mockMvc.perform(post("/api/admin/tenants/{tenantId}/domains", controlPlaneTenantId)
                         .with(superAdmin())
                         .header("Idempotency-Key", "req-" + newHost)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -75,33 +83,33 @@ class TenantRoutingControlPlaneIntegrationTest extends TenantIsolationTestBase {
         assertThat(tenants.findByDomain(HOST_B)).isPresent();
 
         // Direct REQUESTED -> ACTIVE is rejected with 409 Conflict.
-        mockMvc.perform(post("/api/admin/tenants/{tenantId}/domains/{domain}/activate", TENANT_A, newHost)
+        mockMvc.perform(post("/api/admin/tenants/{tenantId}/domains/{domain}/activate", controlPlaneTenantId, newHost)
                         .with(superAdmin()))
                 .andExpect(status().isConflict());
 
         // Advance through lifecycle states.
-        transition(TENANT_A, newHost, "OWNERSHIP_PENDING", "own-" + newHost);
-        transition(TENANT_A, newHost, "CERTIFICATE_PENDING", "cert-" + newHost);
-        transition(TENANT_A, newHost, "TARGET_PENDING", "target-" + newHost);
+        transition(controlPlaneTenantId, newHost, "OWNERSHIP_PENDING", "own-" + newHost);
+        transition(controlPlaneTenantId, newHost, "CERTIFICATE_PENDING", "cert-" + newHost);
+        transition(controlPlaneTenantId, newHost, "TARGET_PENDING", "target-" + newHost);
 
-        long activatedVersion = activate(TENANT_A, newHost, "act-" + newHost);
+        long activatedVersion = activate(controlPlaneTenantId, newHost, "act-" + newHost);
         // Idempotent retry must publish at most one effective directory version.
-        long retriedVersion = activate(TENANT_A, newHost, "act-" + newHost);
+        long retriedVersion = activate(controlPlaneTenantId, newHost, "act-" + newHost);
         assertThat(retriedVersion).isEqualTo(activatedVersion);
         assertThat(activatedVersion).isGreaterThan(baseline.directoryVersion());
 
         // Updating tenant metadata must NOT wipe control-plane domain state.
-        mockMvc.perform(put("/api/admin/tenants/{tenantId}", TENANT_A)
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}", controlPlaneTenantId)
                         .with(superAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "name", "Updated Tenant A",
-                                "domains", List.of(HOST_A, newHost),
+                                "name", "Updated Control Plane Tenant",
+                                "domains", List.of(initialHost, newHost),
                                 "deploymentMode", "SHARED_DB",
                                 "planId", "test"))))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/admin/tenants/{tenantId}/domains/{domain}", TENANT_A, newHost)
+        mockMvc.perform(get("/api/admin/tenants/{tenantId}/domains/{domain}", controlPlaneTenantId, newHost)
                         .with(superAdmin()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
@@ -115,7 +123,7 @@ class TenantRoutingControlPlaneIntegrationTest extends TenantIsolationTestBase {
         assertThat(deltaAfterActivation.activeEntries())
                 .anySatisfy(entry -> {
                     assertThat(entry.hostname()).isEqualTo(newHost);
-                    assertThat(entry.tenantId()).isEqualTo(TENANT_A);
+                    assertThat(entry.tenantId()).isEqualTo(controlPlaneTenantId);
                     assertThat(entry.frontendOrigin()).isEqualTo(frontendOrigin);
                     assertThat(entry.targetId()).isEqualTo("shared-pool");
                 });
@@ -124,7 +132,7 @@ class TenantRoutingControlPlaneIntegrationTest extends TenantIsolationTestBase {
 
         // Suspending removes the domain in delta and blocks backend resolution.
         MvcResult suspendResult = mockMvc.perform(
-                        post("/api/admin/tenants/{tenantId}/domains/{domain}/suspend", TENANT_A, newHost)
+                        post("/api/admin/tenants/{tenantId}/domains/{domain}/suspend", controlPlaneTenantId, newHost)
                                 .with(superAdmin())
                                 .header("Idempotency-Key", "susp-" + newHost))
                 .andExpect(status().isOk())
@@ -139,7 +147,7 @@ class TenantRoutingControlPlaneIntegrationTest extends TenantIsolationTestBase {
                 .extracting(entry -> entry.hostname())
                 .doesNotContain(newHost);
 
-        tenants.invalidateCache(TENANT_A);
+        tenants.invalidateCache(controlPlaneTenantId);
         assertThat(tenants.findByDomain(newHost)).isEmpty();
         assertThat(tenants.findByDomain(HOST_B)).isPresent();
     }
