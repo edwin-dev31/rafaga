@@ -1,5 +1,7 @@
 HELP.md
 .env
+deploy/production/*.env
+!deploy/production/*.env.template
 .gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar

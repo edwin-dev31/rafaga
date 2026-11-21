@@ -29,6 +29,7 @@ spring:
       time-to-live: 5m
   data:
     redis:
+      password: ${REDIS_PASSWORD}
       ssl:
         enabled: ${REDIS_SSL_ENABLED:true}
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}

@@ -18,24 +18,25 @@ or the backend directly on public host ports.
 
 ## Deploy or update
 
-Load the required production values from the platform secret store into the
-deploy shell. They must include the database, Redis, Keycloak, R2, CORS,
-registration-token and trusted-proxy settings documented in `.env.example`.
+Follow the [production operations contract](production-operations-contract.md)
+and install its two protected files on the Swarm manager: configuration in
+`/opt/rafaga/backend.env` and the temporary secret source in
+`/opt/rafaga/secret-source.env`. The latter is consumed to create immutable
+Swarm Secrets and is then removed from the manager.
 
 ```bash
-export RAFAGA_BACKEND_IMAGE=ghcr.io/<owner>/rafaga-backend:<immutable-tag>
-export SPRING_PROFILES_ACTIVE=production
-# Export the remaining production variables from the secret manager here.
-docker stack deploy --with-registry-auth -c deploy/swarm/rafaga-backend-stack.yaml rafaga
-docker service ps rafaga_backend
+scripts/production/provision-swarm-secrets.sh /opt/rafaga/secret-source.env 20261120-01
+rm /opt/rafaga/secret-source.env
+scripts/production/deploy-swarm.sh /opt/rafaga/backend.env \
+  ghcr.io/<owner>/rafaga-backend:<immutable-tag>
 curl -fsS http://<private-backend-address>:3117/actuator/health/readiness
 ```
 
 The production configuration validator prevents startup with missing or unsafe
-settings. The stack passes the sourced variables into the backend container;
-therefore, the protected `/opt/rafaga/backend.env` must contain every required
-production value. Never use `latest`, commit a `.env` file, or place
-credentials in the stack YAML.
+settings. The image reads credentials only from `/run/secrets`; the stack and
+`backend.env` contain only secret names, revision metadata, and non-secret
+configuration. Never use `latest`, commit a `.env` file, or place credentials
+in the stack YAML.
 
 ## Rollback and recovery
 
@@ -54,7 +55,7 @@ specification.
 `Deploy Swarm` is manual-only and requires a protected GitHub `production`
 environment. Configure `VPS_HOST`, `VPS_USER`, `VPS_SSH_PRIVATE_KEY`,
 `VPS_KNOWN_HOSTS`, and a read-only `VPS_GHCR_TOKEN` as environment secrets.
-The VPS keeps all Spring production values in `/opt/rafaga/backend.env` with
-owner-only permissions. The workflow uploads only the public stack definition,
-selects an immutable GHCR tag, and sources that protected environment file on
-the VPS before executing `docker stack deploy`.
+The VPS keeps non-secret production configuration in `/opt/rafaga/backend.env`
+with owner-only permissions. The workflow uploads the public stack definition
+and deployment validator, selects an immutable GHCR tag, verifies the declared
+secret revision exists, and then deploys the stack.

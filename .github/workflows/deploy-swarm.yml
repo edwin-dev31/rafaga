@@ -26,13 +26,15 @@ jobs:
           printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
-      - name: Upload stack definition
+      - name: Upload deployment artifacts
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          scp -i ~/.ssh/id_ed25519 deploy/swarm/rafaga-backend-stack.yaml \
-            "$VPS_USER@$VPS_HOST:/opt/rafaga/rafaga-backend-stack.yaml"
+          scp -i ~/.ssh/id_ed25519 \
+            deploy/swarm/rafaga-backend-stack.yaml \
+            scripts/production/deploy-swarm.sh \
+            "$VPS_USER@$VPS_HOST:/opt/rafaga/"
       - name: Deploy immutable image
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -41,12 +43,14 @@ jobs:
           IMAGE_TAG: ${{ inputs.image_tag }}
           IMAGE_OWNER: ${{ github.repository_owner }}
         run: |
-          case "$IMAGE_TAG" in
-            ''|*[!a-zA-Z0-9._-]*) echo "Invalid immutable image tag" >&2; exit 1 ;;
-          esac
+          if ! printf '%s\n' "$IMAGE_TAG" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "Image tag must be a full lowercase Git commit SHA" >&2
+            exit 1
+          fi
+          TOKEN_B64=$(printf '%s' "$VPS_GHCR_TOKEN" | base64 | tr -d '\n')
           ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" \
-            "set -eu; set -a; . /opt/rafaga/backend.env; set +a; \
-            export RAFAGA_BACKEND_IMAGE=ghcr.io/$IMAGE_OWNER/rafaga-backend:$IMAGE_TAG; \
-            printf '%s' '$VPS_GHCR_TOKEN' | docker login ghcr.io -u deploy --password-stdin; \
-            docker stack deploy --with-registry-auth -c /opt/rafaga/rafaga-backend-stack.yaml rafaga; \
-            docker service ps rafaga_backend --no-trunc"
+            "set -eu; chmod 700 /opt/rafaga/deploy-swarm.sh; \
+            printf '%s' '$TOKEN_B64' | base64 -d | docker login ghcr.io -u deploy --password-stdin; \
+            RAFAGA_STACK_FILE=/opt/rafaga/rafaga-backend-stack.yaml \
+            /opt/rafaga/deploy-swarm.sh /opt/rafaga/backend.env \
+            ghcr.io/$IMAGE_OWNER/rafaga-backend:$IMAGE_TAG"

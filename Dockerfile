@@ -12,8 +12,10 @@ FROM eclipse-temurin:25-jdk-alpine
 RUN addgroup -S rafaga && adduser -S rafaga -G rafaga
 WORKDIR /app
 COPY --from=build --chown=rafaga:rafaga /workspace/build/libs/*.jar /app/rafaga-backend.jar
+COPY --chown=rafaga:rafaga deploy/docker/entrypoint.sh /usr/local/bin/rafaga-entrypoint
+RUN chmod 0555 /usr/local/bin/rafaga-entrypoint
 USER rafaga
 EXPOSE 3117
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:3117/actuator/health/liveness || exit 1
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/rafaga-backend.jar"]
+ENTRYPOINT ["/usr/local/bin/rafaga-entrypoint"]
