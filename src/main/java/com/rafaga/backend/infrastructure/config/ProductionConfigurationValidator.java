@@ -37,6 +37,7 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         requireHttps(issues, "rafaga.identity.keycloak.issuer-uri");
         requireHttps(issues, "spring.security.oauth2.resourceserver.jwt.jwk-set-uri");
         requireHttps(issues, "media.r2.public-base-url");
+        requireRedisEndpoint(issues);
         validateCors(issues);
         validateTrustedProxies(issues);
         return List.copyOf(issues);
@@ -72,6 +73,14 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
                 issues.add("rafaga.web.allowed-origins must contain explicit HTTPS origins only");
                 return;
             }
+        }
+    }
+
+    private void requireRedisEndpoint(List<String> issues) {
+        String host = environment.getProperty("spring.data.redis.host", "");
+        String clusterNodes = environment.getProperty("spring.data.redis.cluster.nodes", "");
+        if (host.isBlank() && clusterNodes.isBlank()) {
+            issues.add("a Redis host or cluster node list is required");
         }
     }
 

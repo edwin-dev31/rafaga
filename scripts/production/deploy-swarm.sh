@@ -47,6 +47,17 @@ require() {
   }
 }
 
+require_one_of() {
+  for variable_name in "$@"; do
+    value=$(printenv "$variable_name" || true)
+    if [ -n "$value" ]; then
+      return
+    fi
+  done
+  echo "One of these values must be configured in $configuration_file: $*" >&2
+  exit 65
+}
+
 for required in \
   RAFAGA_SECRETS_REVISION \
   PLATFORM_OPERATIONS_OWNER \
@@ -57,7 +68,6 @@ for required in \
   PLATFORM_REDIS_LOCATION \
   PLATFORM_TRAEFIK_PUBLIC_HOST \
   PLATFORM_KEYCLOAK_PUBLIC_HOST \
-  REDIS_CLUSTER_NODES \
   KEYCLOAK_JWK_SET_URI \
   KEYCLOAK_ISSUER_URI \
   KEYCLOAK_CLIENT_ID \
@@ -67,6 +77,8 @@ for required in \
   MEDIA_R2_PUBLIC_BASE_URL; do
   require "$required"
 done
+
+require_one_of REDIS_HOST REDIS_CLUSTER_NODES
 
 for secret_suffix in \
   db_shared_url db_shared_user db_shared_password redis_password \
