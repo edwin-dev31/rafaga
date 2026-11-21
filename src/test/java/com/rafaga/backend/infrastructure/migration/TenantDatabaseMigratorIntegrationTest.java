@@ -231,7 +231,17 @@ class TenantDatabaseMigratorIntegrationTest {
     }
 
     private Connection connection(PostgreSQLContainer postgres) throws Exception {
-        return DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        long deadline = System.currentTimeMillis() + 10_000L;
+        while (true) {
+            try {
+                return DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+            } catch (org.postgresql.util.PSQLException ex) {
+                if (!"57P03".equals(ex.getSQLState()) || System.currentTimeMillis() >= deadline) {
+                    throw ex;
+                }
+                Thread.sleep(150L);
+            }
+        }
     }
 
     private int historyCount(PostgreSQLContainer postgres) {
