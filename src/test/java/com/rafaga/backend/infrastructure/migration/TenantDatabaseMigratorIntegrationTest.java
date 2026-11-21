@@ -72,8 +72,8 @@ class TenantDatabaseMigratorIntegrationTest {
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
 
-        assertThat(historyCount(shared)).isEqualTo(17);
-        assertThat(historyCount(dedicated)).isEqualTo(17);
+        assertThat(historyCount(shared)).isEqualTo(18);
+        assertThat(historyCount(dedicated)).isEqualTo(18);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'dedicated-a'"))
                 .isEqualTo(1);
         assertThat(value(dedicated, "SELECT COUNT(*) FROM tenants WHERE id = 'tenant-demo'"))
@@ -100,8 +100,8 @@ class TenantDatabaseMigratorIntegrationTest {
         new DatabaseMigrationConfiguration()
                 .migrateSharedAndDedicatedDatabases(migrator)
                 .migrate(sharedFlyway);
-        assertThat(historyCount(shared)).isEqualTo(17);
-        assertThat(historyCount(dedicated)).isEqualTo(17);
+        assertThat(historyCount(shared)).isEqualTo(18);
+        assertThat(historyCount(dedicated)).isEqualTo(18);
         assertThat(flyway(dedicated).migrate().migrationsExecuted).isZero();
     }
 
@@ -142,7 +142,7 @@ class TenantDatabaseMigratorIntegrationTest {
             }
             assertThat(routing.dedicatedDataSources()).containsKey("tenant-dedicated-a");
         }
-        assertThat(historyCount(dedicated)).isEqualTo(17);
+        assertThat(historyCount(dedicated)).isEqualTo(18);
     }
 
     @Test
@@ -174,12 +174,12 @@ class TenantDatabaseMigratorIntegrationTest {
                 .locations("classpath:db/migration", "classpath:db/dev-migration")
                 .load();
         withDevSeed.migrate();
-        assertThat(historyCount(shared)).isEqualTo(19);
+        assertThat(historyCount(shared)).isEqualTo(20);
 
         Flyway productionLocations = flyway(shared);
         assertThat(MigrationLocationCompatibility.includePreviouslyAppliedDevSeed(productionLocations)
                 .migrate().migrationsExecuted).isZero();
-        assertThat(historyCount(shared)).isEqualTo(19);
+        assertThat(historyCount(shared)).isEqualTo(20);
     }
 
     private TenantDatabaseMigrator migrator(String... locations) {
@@ -231,7 +231,17 @@ class TenantDatabaseMigratorIntegrationTest {
     }
 
     private Connection connection(PostgreSQLContainer postgres) throws Exception {
-        return DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        long deadline = System.currentTimeMillis() + 10_000L;
+        while (true) {
+            try {
+                return DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+            } catch (java.sql.SQLException ex) {
+                if (!"57P03".equals(ex.getSQLState()) || System.currentTimeMillis() >= deadline) {
+                    throw ex;
+                }
+                Thread.sleep(150L);
+            }
+        }
     }
 
     private int historyCount(PostgreSQLContainer postgres) {

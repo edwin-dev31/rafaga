@@ -7,7 +7,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(assignableTypes = {TenantAdminController.class, TenantRoutingAdminController.class})
+@RestControllerAdvice(assignableTypes = {
+        TenantAdminController.class,
+        TenantRoutingAdminController.class,
+        R2CorsAdminController.class
+})
 class TenantExceptionHandler {
     @ExceptionHandler(TenantNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)

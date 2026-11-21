@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.rafaga.backend.inventory.infrastructure.scheduling.ReservationExpiryScheduler;
 import com.rafaga.backend.media.infrastructure.job.MediaCleanupJob;
+import com.rafaga.backend.tenant.infrastructure.scheduling.DomainActivationScheduler;
 import java.lang.reflect.Method;
 import java.util.Map;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -17,7 +18,8 @@ class ScheduledJobLockConfigurationTest {
                 MediaCleanupJob.class.getMethod("cleanupPendingDeletes"), "media.pending-delete-cleanup",
                 MediaCleanupJob.class.getMethod("cleanupExpiredPending"), "media.expired-pending-cleanup",
                 MediaCleanupJob.class.getMethod("reconcileOrphans"), "media.orphan-reconciliation",
-                MediaCleanupJob.class.getMethod("cleanupOrphanedStaging"), "media.orphaned-staging-cleanup");
+                MediaCleanupJob.class.getMethod("cleanupOrphanedStaging"), "media.orphaned-staging-cleanup",
+                DomainActivationScheduler.class.getMethod("processPendingDomains"), "tenant.domain-activation");
 
         jobs.forEach((method, expectedName) -> {
             SchedulerLock lock = method.getAnnotation(SchedulerLock.class);

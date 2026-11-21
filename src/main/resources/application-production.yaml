@@ -74,6 +74,15 @@ rafaga:
       trusted-cidrs: []
   tenant-directory:
     internal-token: ${RAFAGA_TENANT_DIRECTORY_INTERNAL_TOKEN}
+  cloudflare:
+    enabled: ${RAFAGA_CLOUDFLARE_ENABLED:false}
+    api-base-url: ${RAFAGA_CLOUDFLARE_API_BASE_URL:https://api.cloudflare.com/client/v4}
+    zone-id: ${RAFAGA_CLOUDFLARE_ZONE_ID:}
+    api-token: ${RAFAGA_CLOUDFLARE_API_TOKEN:}
+    account-id: ${RAFAGA_CLOUDFLARE_ACCOUNT_ID:${MEDIA_R2_ACCOUNT_ID:}}
+    r2-bucket: ${RAFAGA_CLOUDFLARE_R2_BUCKET:${MEDIA_R2_BUCKET:rafaga-media}}
+    connect-timeout: ${RAFAGA_CLOUDFLARE_CONNECT_TIMEOUT:2s}
+    read-timeout: ${RAFAGA_CLOUDFLARE_READ_TIMEOUT:5s}
   web:
     allowed-origins: ${RAFAGA_ALLOWED_ORIGINS}
     trusted-proxy:
