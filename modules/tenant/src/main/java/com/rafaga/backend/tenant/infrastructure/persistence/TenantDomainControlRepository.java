@@ -1,6 +1,7 @@
 package com.rafaga.backend.tenant.infrastructure.persistence;
 
 import com.rafaga.backend.tenant.domain.model.DomainStatus;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,5 +11,6 @@ public interface TenantDomainControlRepository extends JpaRepository<TenantDomai
     Optional<TenantDomainControl> findByDomain(String domain);
     List<TenantDomainControl> findByTenantIdOrderByDomain(String tenantId);
     List<TenantDomainControl> findByStatus(DomainStatus status);
+    List<TenantDomainControl> findByStatusInOrderByRequestedAtAsc(Collection<DomainStatus> statuses);
     List<TenantDomainControl> findByDirectoryVersionGreaterThanOrderByDirectoryVersion(long version);
 }

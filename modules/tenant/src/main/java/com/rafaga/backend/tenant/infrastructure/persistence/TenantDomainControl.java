@@ -27,6 +27,10 @@ public class TenantDomainControl {
     @Column(name = "suspended_at") private Instant suspendedAt;
     @Enumerated(EnumType.STRING) @Column(name = "operation_state") private DomainOperationState operationState;
     @Column(name = "operation_updated_at") private Instant operationUpdatedAt;
+    @Column(name = "external_hostname_id") private String externalHostnameId;
+    @Column(name = "retry_count") private int retryCount;
+    @Column(name = "next_retry_at") private Instant nextRetryAt;
+    @Column(name = "last_failure_code") private String lastFailureCode;
 
     protected TenantDomainControl() { }
     public TenantDomainControl(String tenantId, String domain, DomainStatus status, String frontendOrigin, String targetId, Instant now) {
@@ -77,6 +81,32 @@ public class TenantDomainControl {
         operationUpdatedAt = now;
     }
 
+    public void recordExternalHostnameId(String externalId, Instant now) {
+        this.externalHostnameId = externalId;
+        this.operationUpdatedAt = now;
+    }
+
+    public void scheduleRetry(String failureCode, Instant retryAt, Instant now) {
+        this.retryCount++;
+        this.nextRetryAt = retryAt;
+        this.lastFailureCode = failureCode;
+        this.operationState = DomainOperationState.RETRY_SCHEDULED;
+        this.operationUpdatedAt = now;
+    }
+
+    public void clearRetry(Instant now) {
+        this.retryCount = 0;
+        this.nextRetryAt = null;
+        this.lastFailureCode = null;
+        this.operationUpdatedAt = now;
+    }
+
+    public void markFailed(String failureCode, long version, Instant now) {
+        transition(DomainStatus.FAILED, version, now);
+        this.lastFailureCode = failureCode;
+        this.nextRetryAt = null;
+    }
+
     public String getTenantId() { return tenantId; }
     public String getDomain() { return domain; }
     public DomainStatus getStatus() { return status; }
@@ -89,4 +119,8 @@ public class TenantDomainControl {
     public Instant getSuspendedAt() { return suspendedAt; }
     public DomainOperationState getOperationState() { return operationState; }
     public Instant getOperationUpdatedAt() { return operationUpdatedAt; }
+    public String getExternalHostnameId() { return externalHostnameId; }
+    public int getRetryCount() { return retryCount; }
+    public Instant getNextRetryAt() { return nextRetryAt; }
+    public String getLastFailureCode() { return lastFailureCode; }
 }
