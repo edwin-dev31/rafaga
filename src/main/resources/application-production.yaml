@@ -36,9 +36,6 @@ spring:
         enabled: ${REDIS_SSL_ENABLED:true}
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
       timeout: ${REDIS_TIMEOUT:2s}
-      cluster:
-        nodes: ${REDIS_CLUSTER_NODES:}
-        max-redirects: ${REDIS_CLUSTER_MAX_REDIRECTS:3}
   jpa:
     hibernate:
       ddl-auto: validate
