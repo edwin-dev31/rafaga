@@ -20,7 +20,7 @@ jobs:
           java-version: '25'
           cache: gradle
       - name: Start test infrastructure
-        run: docker compose -f compose.test.yaml up -d --wait
+        run: docker compose -f compose.test.yaml up -d --wait postgres-test redis-test keycloak-test
       - name: Configure restricted database role
         run: docker compose -f compose.test.yaml run --rm postgres-role-setup-test
       - name: Run full test suite
