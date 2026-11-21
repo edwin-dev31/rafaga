@@ -61,6 +61,7 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health/**").permitAll()
+                        .requestMatchers("/api/internal/tenant-directory/**").permitAll()
                         .requestMatchers("/api/public/auth/login").permitAll()
                         .requestMatchers("/api/public/auth/register").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/public/**").denyAll()

@@ -28,6 +28,7 @@ class ProductionConfigurationValidatorTest {
     private MockEnvironment validEnvironment() {
         return new MockEnvironment()
                 .withProperty("rafaga.identity.registration-token", "registration-token-value-with-32-characters")
+                .withProperty("rafaga.tenant-directory.internal-token", "tenant-directory-internal-token-32-chars")
                 .withProperty("rafaga.identity.keycloak.client-secret", "client-secret-value-with-enough-length")
                 .withProperty("rafaga.identity.keycloak.admin-client-secret", "admin-secret-value-with-enough-length")
                 .withProperty("media.r2.account-id", "account")

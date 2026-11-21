@@ -75,6 +75,8 @@ rafaga:
     internal-header:
       enabled: false
       trusted-cidrs: []
+  tenant-directory:
+    internal-token: ${RAFAGA_TENANT_DIRECTORY_INTERNAL_TOKEN}
   web:
     allowed-origins: ${RAFAGA_ALLOWED_ORIGINS}
     trusted-proxy:

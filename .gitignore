@@ -1,5 +1,6 @@
 HELP.md
 .env
+.local/
 deploy/production/*.env
 !deploy/production/*.env.template
 .gradle

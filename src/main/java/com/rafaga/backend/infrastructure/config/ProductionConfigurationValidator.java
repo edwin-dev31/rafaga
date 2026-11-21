@@ -29,6 +29,7 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
     List<String> validate() {
         List<String> issues = new ArrayList<>();
         require(issues, "rafaga.identity.registration-token", 32);
+        require(issues, "rafaga.tenant-directory.internal-token", 32);
         require(issues, "rafaga.identity.keycloak.client-secret", 16);
         require(issues, "rafaga.identity.keycloak.admin-client-secret", 16);
         require(issues, "media.r2.account-id", 1);

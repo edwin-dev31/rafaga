@@ -43,6 +43,8 @@ rafaga:
     enabled: false
   rate-limit:
     enabled: false
+  tenant-directory:
+    internal-token: ${TEST_TENANT_DIRECTORY_INTERNAL_TOKEN:rafaga_test_directory_internal_token}
   web:
     allowed-origins: ${TEST_ALLOWED_ORIGINS:http://localhost:3000}
   identity:

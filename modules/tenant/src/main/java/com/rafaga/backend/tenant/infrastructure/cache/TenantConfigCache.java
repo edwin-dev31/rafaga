@@ -17,12 +17,12 @@ public class TenantConfigCache {
         this.store = store;
     }
 
-    @Cacheable(cacheNames = TENANTS_CACHE, key = "'id:' + #p0")
+    @Cacheable(cacheNames = TENANTS_CACHE, key = "'id:' + #p0", unless = "#result == null")
     public Optional<TenantConfig> get(String tenantId) {
         return store.findById(tenantId);
     }
 
-    @Cacheable(cacheNames = TENANTS_CACHE, key = "'domain:' + #p0")
+    @Cacheable(cacheNames = TENANTS_CACHE, key = "'domain:' + #p0", unless = "#result == null")
     public Optional<TenantConfig> getByDomain(String domain) {
         return store.findByDomain(domain);
     }
