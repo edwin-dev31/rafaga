@@ -82,6 +82,7 @@ jobs:
           --tests "com.rafaga.backend.FeatureFlagEnforcementIntegrationTest"
           --tests "com.rafaga.backend.TenantRoutingControlPlaneIntegrationTest"
           --tests "com.rafaga.backend.CloudflareProvisioningContractIntegrationTest"
+          --tests "com.rafaga.backend.GatewayForwardedContextIntegrationTest"
           --tests "com.rafaga.backend.StorefrontMultiTenantIsolationTest"
           --tests "com.rafaga.backend.BusinessMigrationIsolationTest"
           --tests "com.rafaga.backend.infrastructure.migration.TenantDatabaseMigratorIntegrationTest"
