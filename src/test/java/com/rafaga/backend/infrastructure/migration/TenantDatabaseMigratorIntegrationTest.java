@@ -235,7 +235,7 @@ class TenantDatabaseMigratorIntegrationTest {
         while (true) {
             try {
                 return DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
-            } catch (org.postgresql.util.PSQLException ex) {
+            } catch (java.sql.SQLException ex) {
                 if (!"57P03".equals(ex.getSQLState()) || System.currentTimeMillis() >= deadline) {
                     throw ex;
                 }
