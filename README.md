@@ -63,6 +63,7 @@ application/
 - [Role and access strategy](docs/role-access-strategy.md)
 - [API guide](docs/api.md)
 - [Deployment guide](docs/deployment-guide.md)
+- [Docker Swarm backend deployment](docs/docker-swarm-deployment.md)
 - [Developer onboarding](docs/developer-onboarding.md)
 - [Cloudflare r2 and cdn setup](docs/cloudflare-r2-cdn-setup.md)
 

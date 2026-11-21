@@ -46,7 +46,8 @@ public class SecurityConfig {
         }
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
         OAuth2TokenValidator<Jwt> issuer = JwtValidators.createDefaultWithIssuer(properties.getIssuerUri());
-        OAuth2TokenValidator<Jwt> audience = jwt -> jwt.getAudience().contains(properties.getClientId())
+        OAuth2TokenValidator<Jwt> audience = jwt -> jwt.getAudience() != null
+                && jwt.getAudience().contains(properties.getClientId())
                 ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "JWT audience is invalid", null));
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(issuer, audience));

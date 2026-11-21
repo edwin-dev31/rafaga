@@ -40,7 +40,7 @@ class ReservationExpirySchedulerTest {
         });
 
         new ReservationExpiryScheduler(tenants, stock, Clock.fixed(now, ZoneOffset.UTC))
-                .expireReservations();
+                .expireReservationsImmediately();
 
         verify(stock).expireReservation(id);
         assertThat(TenantContext.isSet()).isFalse();

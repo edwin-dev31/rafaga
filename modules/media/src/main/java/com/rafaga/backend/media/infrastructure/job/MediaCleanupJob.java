@@ -1,6 +1,7 @@
 package com.rafaga.backend.media.infrastructure.job;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
+import com.rafaga.backend.common.application.JobOutcomeRegistry;
 import com.rafaga.backend.media.application.port.out.MediaRepository;
 import com.rafaga.backend.media.application.port.out.ObjectStorage;
 import com.rafaga.backend.media.domain.model.MediaAsset;
@@ -28,25 +29,37 @@ public class MediaCleanupJob {
     private final ObjectStorage objectStorage;
     private final TenantRegistry tenantRegistry;
     private final Clock clock;
+    private final JobOutcomeRegistry outcomes;
 
     @Value("${media.cache.grace-period-hours:24}")
     private int gracePeriodHours;
 
     @Autowired
-    public MediaCleanupJob(MediaRepository repository, ObjectStorage objectStorage, TenantRegistry tenantRegistry) {
-        this(repository, objectStorage, tenantRegistry, Clock.systemUTC());
+    public MediaCleanupJob(MediaRepository repository, ObjectStorage objectStorage, TenantRegistry tenantRegistry,
+            JobOutcomeRegistry outcomes) {
+        this(repository, objectStorage, tenantRegistry, Clock.systemUTC(), outcomes);
     }
 
     MediaCleanupJob(MediaRepository repository, ObjectStorage objectStorage, TenantRegistry tenantRegistry, Clock clock) {
+        this(repository, objectStorage, tenantRegistry, clock, new JobOutcomeRegistry());
+    }
+
+    MediaCleanupJob(MediaRepository repository, ObjectStorage objectStorage, TenantRegistry tenantRegistry,
+            Clock clock, JobOutcomeRegistry outcomes) {
         this.repository = repository;
         this.objectStorage = objectStorage;
         this.tenantRegistry = tenantRegistry;
         this.clock = clock;
+        this.outcomes = outcomes;
     }
 
     @Scheduled(cron = "0 0 * * * *")
     @SchedulerLock(name = "media.pending-delete-cleanup", lockAtMostFor = "PT10M")
     public void cleanupPendingDeletes() {
+        outcomes.execute("media.pending-delete-cleanup", this::cleanupPendingDeletesOnce);
+    }
+
+    private void cleanupPendingDeletesOnce() {
         Instant threshold = Instant.now(clock).minus(Duration.ofHours(gracePeriodHours));
         List<TenantConfig> tenants = tenantRegistry.findAll();
 
@@ -78,6 +91,10 @@ public class MediaCleanupJob {
     @Scheduled(cron = "0 0 */6 * * *")
     @SchedulerLock(name = "media.expired-pending-cleanup", lockAtMostFor = "PT10M")
     public void cleanupExpiredPending() {
+        outcomes.execute("media.expired-pending-cleanup", this::cleanupExpiredPendingOnce);
+    }
+
+    private void cleanupExpiredPendingOnce() {
         Instant threshold = Instant.now(clock);
         List<TenantConfig> tenants = tenantRegistry.findAll();
 
@@ -109,6 +126,10 @@ public class MediaCleanupJob {
     @Scheduled(cron = "0 0 2 * * *")
     @SchedulerLock(name = "media.orphan-reconciliation", lockAtMostFor = "PT30M")
     public void reconcileOrphans() {
+        outcomes.execute("media.orphan-reconciliation", this::reconcileOrphansOnce);
+    }
+
+    private void reconcileOrphansOnce() {
         log.info("Starting R2-PostgreSQL reconciliation");
         List<TenantConfig> tenants = tenantRegistry.findAll();
 
@@ -135,6 +156,10 @@ public class MediaCleanupJob {
     @Scheduled(cron = "0 30 * * * *")
     @SchedulerLock(name = "media.orphaned-staging-cleanup", lockAtMostFor = "PT10M")
     public void cleanupOrphanedStaging() {
+        outcomes.execute("media.orphaned-staging-cleanup", this::cleanupOrphanedStagingOnce);
+    }
+
+    private void cleanupOrphanedStagingOnce() {
         List<TenantConfig> tenants = tenantRegistry.findAll();
 
         for (TenantConfig tenant : tenants) {

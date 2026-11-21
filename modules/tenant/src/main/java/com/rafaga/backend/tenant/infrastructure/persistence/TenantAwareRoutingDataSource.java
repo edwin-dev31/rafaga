@@ -5,6 +5,7 @@ import com.rafaga.backend.tenant.application.port.DatabaseConnectionDetails;
 import com.rafaga.backend.tenant.application.port.TenantDatabaseCredentialsProvider;
 import com.rafaga.backend.tenant.application.port.DedicatedDatabaseMigration;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.application.PlatformDataSourceMetrics;
 import com.rafaga.backend.tenant.domain.model.DatabaseConfig;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
@@ -19,7 +20,8 @@ import javax.sql.DataSource;
 import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
 
 /** Routes shared requests to one pool and lazily creates a dedicated pool when a tenant needs one. */
-public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource implements AutoCloseable {
+public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource
+        implements AutoCloseable, PlatformDataSourceMetrics {
     public static final String SYSTEM_KEY = "system";
     public static final String SHARED_KEY = "shared";
 
@@ -83,6 +85,17 @@ public class TenantAwareRoutingDataSource extends AbstractRoutingDataSource impl
 
     public HikariDataSource sharedDataSource() {
         return sharedDataSource;
+    }
+
+    @Override
+    public PoolMetrics sharedPoolMetrics() {
+        var metrics = sharedDataSource.getHikariPoolMXBean();
+        if (metrics == null) {
+            return new PoolMetrics(0, 0, 0, sharedDataSource.getMaximumPoolSize(), 0);
+        }
+        return new PoolMetrics(metrics.getActiveConnections(), metrics.getIdleConnections(),
+                metrics.getTotalConnections(), sharedDataSource.getMaximumPoolSize(),
+                metrics.getThreadsAwaitingConnection());
     }
 
     private HikariDataSource dedicatedDataSource(TenantConfig tenant) {

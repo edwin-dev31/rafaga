@@ -125,7 +125,7 @@ class InventoryApiIntegrationTest extends TenantIsolationTestBase {
         ReservationView expiring = stock.reserveStock(productId, null, 2,
                 "order-" + UUID.randomUUID(), Instant.now().minusSeconds(5));
         TenantContext.clear();
-        scheduler.expireReservations();
+        scheduler.expireReservationsImmediately();
         TenantContext.setCurrentTenantId(TENANT_A);
         assertThat(stock.getStockLevel(productId, null).availableQuantity()).isEqualTo(7);
         assertThat(stock.getActiveReservations(expiring.referenceId())).isEmpty();

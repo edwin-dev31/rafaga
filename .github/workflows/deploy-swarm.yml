@@ -1,0 +1,52 @@
+name: Deploy Swarm
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable GHCR image tag (normally the commit SHA)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH trust
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Upload stack definition
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          scp -i ~/.ssh/id_ed25519 deploy/swarm/rafaga-backend-stack.yaml \
+            "$VPS_USER@$VPS_HOST:/opt/rafaga/rafaga-backend-stack.yaml"
+      - name: Deploy immutable image
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_GHCR_TOKEN: ${{ secrets.VPS_GHCR_TOKEN }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+        run: |
+          case "$IMAGE_TAG" in
+            ''|*[!a-zA-Z0-9._-]*) echo "Invalid immutable image tag" >&2; exit 1 ;;
+          esac
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" \
+            "set -eu; set -a; . /opt/rafaga/backend.env; set +a; \
+            export RAFAGA_BACKEND_IMAGE=ghcr.io/$IMAGE_OWNER/rafaga-backend:$IMAGE_TAG; \
+            printf '%s' '$VPS_GHCR_TOKEN' | docker login ghcr.io -u deploy --password-stdin; \
+            docker stack deploy --with-registry-auth -c /opt/rafaga/rafaga-backend-stack.yaml rafaga; \
+            docker service ps rafaga_backend --no-trunc"

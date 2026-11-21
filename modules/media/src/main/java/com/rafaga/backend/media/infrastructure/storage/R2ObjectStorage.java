@@ -18,6 +18,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.SdkHttpClient;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -61,7 +62,7 @@ public class R2ObjectStorage implements ObjectStorage {
             .apiCallTimeout(readTimeout)
             .apiCallAttemptTimeout(readTimeout)
             .build();
-        UrlConnectionHttpClient httpClient = UrlConnectionHttpClient.builder()
+        SdkHttpClient httpClient = UrlConnectionHttpClient.builder()
             .connectionTimeout(connectTimeout)
             .socketTimeout(readTimeout)
             .build();

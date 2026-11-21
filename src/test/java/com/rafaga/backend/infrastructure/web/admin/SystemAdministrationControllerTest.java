@@ -7,12 +7,13 @@ import static org.mockito.Mockito.when;
 
 import java.util.Map;
 import java.util.List;
+import com.rafaga.backend.tenant.application.PlatformDataSourceMetrics;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.common.application.JobOutcomeRegistry;
+import com.rafaga.backend.media.application.MediaOperations;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.domain.model.TenantStatus;
-import com.rafaga.backend.tenant.infrastructure.persistence.TenantAwareRoutingDataSource;
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
@@ -35,7 +36,8 @@ class SystemAdministrationControllerTest {
                 "dedicatedDatabaseHealthIndicator", dedicated,
                 "redisHealthIndicator", redis,
                 "keycloakHealthIndicator", keycloak), new ConcurrentMapCacheManager("products"),
-                mock(TenantRegistry.class), mock(TenantAwareRoutingDataSource.class));
+                mock(TenantRegistry.class), mock(PlatformDataSourceMetrics.class),
+                mock(JobOutcomeRegistry.class), mock(MediaOperations.class));
 
         var response = controller.health();
 
@@ -52,7 +54,8 @@ class SystemAdministrationControllerTest {
         ConcurrentMapCacheManager cacheManager = new ConcurrentMapCacheManager("products");
         cacheManager.getCache("products").put("tenant-a:product-a", "cached");
         SystemAdministrationController controller = new SystemAdministrationController(Map.of(), cacheManager,
-                mock(TenantRegistry.class), mock(TenantAwareRoutingDataSource.class));
+                mock(TenantRegistry.class), mock(PlatformDataSourceMetrics.class),
+                mock(JobOutcomeRegistry.class), mock(MediaOperations.class));
 
         controller.invalidateCache("products");
 
@@ -64,17 +67,17 @@ class SystemAdministrationControllerTest {
     @Test
     void returnsOnlyBoundedPlatformStateInTheOperationsOverview() {
         TenantRegistry registry = mock(TenantRegistry.class);
-        TenantAwareRoutingDataSource dataSource = mock(TenantAwareRoutingDataSource.class);
-        HikariDataSource pool = mock(HikariDataSource.class);
-        when(dataSource.sharedDataSource()).thenReturn(pool);
-        when(pool.getMaximumPoolSize()).thenReturn(50);
+        PlatformDataSourceMetrics dataSourceMetrics = mock(PlatformDataSourceMetrics.class);
+        when(dataSourceMetrics.sharedPoolMetrics())
+                .thenReturn(new PlatformDataSourceMetrics.PoolMetrics(2, 8, 10, 50, 1));
         when(registry.findAll()).thenReturn(List.of(
                 new TenantConfig("a", "A", List.of("a.example.test"), DeploymentMode.SHARED_DB,
                         null, "basic", TenantStatus.ACTIVE, Map.of()),
                 new TenantConfig("b", "B", List.of("b.example.test", "shop-b.example.test"),
                         DeploymentMode.DEDICATED_DB, null, "pro", TenantStatus.INACTIVE, Map.of())));
         SystemAdministrationController controller = new SystemAdministrationController(Map.of(),
-                new ConcurrentMapCacheManager("products", "tenants"), registry, dataSource);
+                new ConcurrentMapCacheManager("products", "tenants"), registry, dataSourceMetrics,
+                mock(JobOutcomeRegistry.class), mock(MediaOperations.class));
 
         var overview = controller.overview();
 
