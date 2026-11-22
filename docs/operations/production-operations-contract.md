@@ -52,7 +52,7 @@ Credentials are Docker Swarm Secrets, named with a revision such as
 `rafaga_media_r2_secret_access_key_20261120-01`. The backend image mounts only
 the secrets it consumes; Cloudflare and Traefik credentials are provisioned in
 the same inventory but are not mounted until their respective deployments
-exist. See [production secrets and rotation](production-secrets-and-rotation.md).
+exist. See [production secrets and rotation](../security/production-secrets-and-rotation.md).
 
 Backend release images use a GHCR commit-SHA tag. The deployment script rejects
 `latest` and snapshot tags. Traefik and other future service images must use a

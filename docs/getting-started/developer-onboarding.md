@@ -66,5 +66,5 @@ also require Docker.
 Use constructor injection, validation DTOs, and transactions at application
 service boundaries. Do not log secrets. Keep production defaults restrictive:
 only health probes are public, OpenAPI UI is disabled, and administration routes
-require `SUPER_ADMIN`. Consult [role-access-strategy.md](role-access-strategy.md)
+require `SUPER_ADMIN`. Consult [role-access-strategy.md](../security/role-access-strategy.md)
 before changing an endpoint's authorization.

@@ -11,7 +11,7 @@
 
 Set `SPRING_PROFILES_ACTIVE=production`. Provide database, Redis, Keycloak,
 CORS, and registration-token values through the environment; their names and
-required production settings are listed in the root [README](../README.md).
+required production settings are listed in [Environment Variables](../configuration/environment-variables.md).
 Never place credentials in source control, tenant records, command lines, or
 application logs.
 
