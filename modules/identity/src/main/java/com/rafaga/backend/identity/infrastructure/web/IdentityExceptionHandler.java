@@ -1,6 +1,7 @@
 package com.rafaga.backend.identity.infrastructure.web;
 
 import com.rafaga.backend.identity.application.exception.CrossTenantAccessException;
+import com.rafaga.backend.identity.application.exception.IdentityProviderUnavailableException;
 import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
 import com.rafaga.backend.identity.application.exception.InvalidRegistrationTokenException;
 import com.rafaga.backend.identity.application.exception.InvalidCredentialsException;
@@ -46,6 +47,12 @@ class IdentityExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     Map<String, String> userAlreadyExists(UserAlreadyExistsException exception) {
         return Map.of("message", exception.getMessage());
+    }
+
+    @ExceptionHandler(IdentityProviderUnavailableException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    Map<String, String> identityProviderUnavailable(IdentityProviderUnavailableException exception) {
+        return Map.of("message", "Authentication service is temporarily unavailable");
     }
 
     @ExceptionHandler(RuntimeException.class)
