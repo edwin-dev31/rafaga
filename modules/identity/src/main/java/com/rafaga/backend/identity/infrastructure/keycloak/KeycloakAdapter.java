@@ -6,12 +6,15 @@ import com.rafaga.backend.identity.application.port.AuthenticationTokens;
 import com.rafaga.backend.identity.application.port.IdentityProfile;
 import com.rafaga.backend.identity.application.port.TokenValidationResult;
 import com.rafaga.backend.identity.application.port.UserRegistration;
+import com.rafaga.backend.identity.application.exception.IdentityProviderUnavailableException;
 import com.rafaga.backend.identity.application.exception.InvalidCredentialsException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
@@ -22,12 +25,14 @@ import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
 
 @Component
 public class KeycloakAdapter implements AuthenticationPort {
+    private static final Logger log = LoggerFactory.getLogger(KeycloakAdapter.class);
     private final KeycloakProperties properties;
     private final ObjectProvider<JwtDecoder> jwtDecoderProvider;
     private final RestClient restClient;
@@ -45,15 +50,15 @@ public class KeycloakAdapter implements AuthenticationPort {
             return requestUserTokens(username, password);
         } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.BadRequest exception) {
             throw new InvalidCredentialsException();
-        } catch (ResourceAccessException exception) {
-            throw new IllegalStateException("Unable to connect to Keycloak. Please try again later.", exception);
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            throw new IdentityProviderUnavailableException("Authentication service is temporarily unavailable", exception);
         } catch (HttpClientErrorException exception) {
             throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
         } catch (RuntimeException exception) {
             if (exception.getMessage() != null && exception.getMessage().contains("must be configured")) {
                 throw exception;
             }
-            throw new IllegalStateException("Authentication service error. Please try again later.", exception);
+            throw new IdentityProviderUnavailableException("Authentication service is temporarily unavailable", exception);
         }
     }
 
@@ -92,7 +97,14 @@ public class KeycloakAdapter implements AuthenticationPort {
 
     @Override
     public IdentityProfile registerUser(String tenantId, UserRegistration registration) {
-        String adminAccessToken = requestAdminAccessToken();
+        String adminAccessToken;
+        try {
+            adminAccessToken = requestAdminAccessToken();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.provision outcome=IDP_UNAVAILABLE tenantId={} reason=admin_token_fetch_failed",
+                    tenantId);
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        }
         KeycloakUserRegistration payload = new KeycloakUserRegistration(
                 registration.username(),
                 registration.firstName(),
@@ -110,10 +122,21 @@ public class KeycloakAdapter implements AuthenticationPort {
                     .retrieve()
                     .toBodilessEntity();
         } catch (HttpClientErrorException.Conflict exception) {
+            log.warn("event=keycloak.provision outcome=CONFLICT tenantId={}", tenantId);
             throw new UserAlreadyExistsException();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.provision outcome=IDP_UNAVAILABLE tenantId={} reason=user_create_failed",
+                    tenantId);
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
         }
         String keycloakId = identifierFrom(response.getHeaders().getLocation());
-        assignStoreManagerRole(adminAccessToken, keycloakId);
+        try {
+            assignStoreManagerRole(adminAccessToken, keycloakId);
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.provision outcome=ROLE_ASSIGNMENT_FAILED tenantId={}", tenantId);
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        }
+        log.info("event=keycloak.provision outcome=SUCCESS tenantId={}", tenantId);
         return new IdentityProfile(keycloakId, registration.username(), registration.email(), tenantId);
     }
 

@@ -2,8 +2,12 @@ package com.rafaga.backend.identity.application.service;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.identity.application.exception.CrossTenantAccessException;
+import com.rafaga.backend.identity.application.exception.IdentityProviderUnavailableException;
 import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
+import com.rafaga.backend.identity.application.exception.InvalidCredentialsException;
+import com.rafaga.backend.identity.application.exception.InvalidRegistrationTokenException;
 import com.rafaga.backend.identity.application.exception.UnauthenticatedUserException;
+import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import com.rafaga.backend.identity.application.port.AuthenticationPort;
 import com.rafaga.backend.identity.application.port.AuthenticationTokens;
 import com.rafaga.backend.identity.application.port.IdentityProfile;
@@ -51,18 +55,42 @@ public class UserService {
 
     @Transactional
     public AuthenticationTokens authenticateUser(String username, String password) {
-        AuthenticationTokens tokens = authenticationPort.login(username, password);
-        synchronizeProfile(authenticationPort.getUserInfo(tokens.accessToken()));
-        log.info("Authentication succeeded for tenant {}", TenantContext.getCurrentTenantId());
-        return tokens;
+        String tenantId = TenantContext.getCurrentTenantId();
+        try {
+            AuthenticationTokens tokens = authenticationPort.login(username, password);
+            synchronizeProfile(authenticationPort.getUserInfo(tokens.accessToken()));
+            log.info("event=auth.login outcome=SUCCESS tenantId={}", tenantId);
+            return tokens;
+        } catch (InvalidCredentialsException exception) {
+            log.warn("event=auth.login outcome=INVALID_CREDENTIALS tenantId={}", tenantId);
+            throw exception;
+        } catch (CrossTenantAccessException exception) {
+            log.warn("event=auth.login outcome=CROSS_TENANT_DENIED tenantId={}", tenantId);
+            throw exception;
+        } catch (IdentityProviderUnavailableException exception) {
+            log.warn("event=auth.login outcome=IDP_UNAVAILABLE tenantId={}", tenantId);
+            throw exception;
+        }
     }
 
     @Transactional
     public UserProfile registerUser(String registrationToken, UserRegistration registration) {
-        registrationTokenValidator.validate(registrationToken);
-        UserProfile user = synchronizeProfile(authenticationPort.registerUser(currentTenantId(), registration));
-        log.info("User registration succeeded for tenant {}", currentTenantId());
-        return user;
+        String tenantId = currentTenantId();
+        try {
+            registrationTokenValidator.validate(registrationToken);
+            UserProfile user = synchronizeProfile(authenticationPort.registerUser(tenantId, registration));
+            log.info("event=auth.register outcome=SUCCESS tenantId={}", tenantId);
+            return user;
+        } catch (InvalidRegistrationTokenException exception) {
+            log.warn("event=auth.register outcome=INVALID_TOKEN tenantId={}", tenantId);
+            throw exception;
+        } catch (UserAlreadyExistsException exception) {
+            log.warn("event=auth.register outcome=USER_ALREADY_EXISTS tenantId={}", tenantId);
+            throw exception;
+        } catch (IdentityProviderUnavailableException exception) {
+            log.warn("event=auth.register outcome=IDP_UNAVAILABLE tenantId={}", tenantId);
+            throw exception;
+        }
     }
 
     @Transactional(readOnly = true)

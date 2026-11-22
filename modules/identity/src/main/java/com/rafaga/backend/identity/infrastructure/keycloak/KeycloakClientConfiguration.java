@@ -9,7 +9,7 @@ import org.springframework.web.client.RestClient;
 @Configuration(proxyBeanMethods = false)
 public class KeycloakClientConfiguration {
     @Bean("keycloakRestClient")
-    RestClient keycloakRestClient(KeycloakProperties properties) {
+    public RestClient keycloakRestClient(KeycloakProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(properties.getConnectTimeout());
         requestFactory.setReadTimeout(properties.getReadTimeout());

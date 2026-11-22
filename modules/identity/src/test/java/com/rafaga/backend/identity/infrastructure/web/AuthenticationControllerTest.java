@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.rafaga.backend.identity.application.exception.IdentityProviderUnavailableException;
 import com.rafaga.backend.identity.application.exception.InvalidRegistrationTokenException;
 import com.rafaga.backend.identity.application.port.AuthenticationTokens;
 import com.rafaga.backend.identity.application.service.UserService;
@@ -40,6 +41,19 @@ class AuthenticationControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"person\",\"firstName\":\"Person\",\"lastName\":\"Example\",\"email\":\"person@example.test\",\"password\":\"secret\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void returns503WithGenericMessageWhenKeycloakIsUnavailable() throws Exception {
+        UserService service = mock(UserService.class);
+        when(service.authenticateUser("person", "secret"))
+                .thenThrow(new IdentityProviderUnavailableException("Keycloak connection refused"));
+
+        mockMvc(service).perform(post("/api/public/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"person\",\"password\":\"secret\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value("Authentication service is temporarily unavailable"));
     }
 
     private MockMvc mockMvc(UserService service) {
