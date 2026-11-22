@@ -42,6 +42,7 @@ jobs:
           --tests "com.rafaga.backend.tenant.infrastructure.persistence.JpaTenantRegistryTest"
           --tests "com.rafaga.backend.tenant.infrastructure.persistence.TenantAwareRoutingDataSourceTest"
           --tests "com.rafaga.backend.tenant.infrastructure.persistence.TenantConnectionCustomizerTest"
+          --tests "com.rafaga.backend.tenant.infrastructure.secrets.*"
           --tests "com.rafaga.backend.tenant.infrastructure.web.*"
       - name: Run root unit & contract tests
         run: >-
@@ -83,6 +84,7 @@ jobs:
           --tests "com.rafaga.backend.TenantRoutingControlPlaneIntegrationTest"
           --tests "com.rafaga.backend.CloudflareProvisioningContractIntegrationTest"
           --tests "com.rafaga.backend.GatewayForwardedContextIntegrationTest"
+          --tests "com.rafaga.backend.DedicatedTargetTransitionIntegrationTest"
           --tests "com.rafaga.backend.StorefrontMultiTenantIsolationTest"
           --tests "com.rafaga.backend.BusinessMigrationIsolationTest"
           --tests "com.rafaga.backend.infrastructure.migration.TenantDatabaseMigratorIntegrationTest"

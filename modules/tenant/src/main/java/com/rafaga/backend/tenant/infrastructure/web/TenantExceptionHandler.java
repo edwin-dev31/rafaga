@@ -10,7 +10,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice(assignableTypes = {
         TenantAdminController.class,
         TenantRoutingAdminController.class,
-        R2CorsAdminController.class
+        R2CorsAdminController.class,
+        DeploymentTargetAdminController.class,
+        TenantTargetTransitionAdminController.class
 })
 class TenantExceptionHandler {
     @ExceptionHandler(TenantNotFoundException.class)
