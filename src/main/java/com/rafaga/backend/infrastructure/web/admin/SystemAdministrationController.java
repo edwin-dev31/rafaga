@@ -3,6 +3,7 @@ package com.rafaga.backend.infrastructure.web.admin;
 import com.rafaga.backend.common.application.JobOutcomeRegistry;
 import com.rafaga.backend.media.application.MediaOperations;
 import com.rafaga.backend.tenant.application.PlatformDataSourceMetrics;
+import com.rafaga.backend.tenant.application.TenantOperationsQuery;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.cache.Cache;
@@ -47,17 +49,31 @@ public class SystemAdministrationController {
     private final PlatformDataSourceMetrics dataSourceMetrics;
     private final JobOutcomeRegistry jobOutcomes;
     private final MediaOperations mediaOperations;
+    private final TenantOperationsQuery tenantOperationsQuery;
+    private final GatewayOperationsClient gatewayOperationsClient;
 
     public SystemAdministrationController(Map<String, HealthIndicator> healthIndicators,
             CacheManager cacheManager, TenantRegistry tenantRegistry,
             PlatformDataSourceMetrics dataSourceMetrics, JobOutcomeRegistry jobOutcomes,
             MediaOperations mediaOperations) {
+        this(healthIndicators, cacheManager, tenantRegistry, dataSourceMetrics, jobOutcomes,
+                mediaOperations, null, null);
+    }
+
+    @Autowired
+    public SystemAdministrationController(Map<String, HealthIndicator> healthIndicators,
+            CacheManager cacheManager, TenantRegistry tenantRegistry,
+            PlatformDataSourceMetrics dataSourceMetrics, JobOutcomeRegistry jobOutcomes,
+            MediaOperations mediaOperations, TenantOperationsQuery tenantOperationsQuery,
+            GatewayOperationsClient gatewayOperationsClient) {
         this.healthIndicators = Map.copyOf(healthIndicators);
         this.cacheManager = cacheManager;
         this.tenantRegistry = tenantRegistry;
         this.dataSourceMetrics = dataSourceMetrics;
         this.jobOutcomes = jobOutcomes;
         this.mediaOperations = mediaOperations;
+        this.tenantOperationsQuery = tenantOperationsQuery;
+        this.gatewayOperationsClient = gatewayOperationsClient;
     }
 
     @GetMapping("/health")
@@ -75,6 +91,12 @@ public class SystemAdministrationController {
         List<com.rafaga.backend.tenant.domain.model.TenantConfig> tenants = tenantRegistry.findAll();
         MemoryUsage heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
         Instant startedAt = Instant.ofEpochMilli(ManagementFactory.getRuntimeMXBean().getStartTime());
+        TenantOperationsQuery.PlatformRoutingSummary routing = tenantOperationsQuery == null
+                ? new TenantOperationsQuery.PlatformRoutingSummary(0, 0, 0, 0, 0, Map.of())
+                : tenantOperationsQuery.platformSummary();
+        GatewayOperationsClient.GatewayStatusSummary gateway = gatewayOperationsClient == null
+                ? GatewayOperationsClient.GatewayStatusSummary.unknown()
+                : gatewayOperationsClient.fetchStatus();
         return new PlatformOverviewResponse(
                 startedAt,
                 Duration.between(startedAt, Instant.now()).toSeconds(),
@@ -87,7 +109,9 @@ public class SystemAdministrationController {
                         tenants.size(),
                         tenants.stream().filter(tenant -> tenant.status() == TenantStatus.ACTIVE).count(),
                         tenants.stream().filter(tenant -> tenant.deploymentMode() == DeploymentMode.DEDICATED_DB).count(),
-                        tenants.stream().mapToLong(tenant -> tenant.domains().size()).sum()));
+                        tenants.stream().mapToLong(tenant -> tenant.domains().size()).sum()),
+                routing,
+                gateway);
     }
 
     @GetMapping("/tenants/{tenantId}/operations")
@@ -95,9 +119,12 @@ public class SystemAdministrationController {
         TenantConfig tenant = tenantRegistry.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
         MediaOperations.TenantQuota quota = mediaOperations.quotaFor(tenantId);
+        List<TenantOperationsQuery.DomainLifecycleSummary> domains = tenantOperationsQuery == null
+                ? List.of()
+                : tenantOperationsQuery.tenantSummary(tenantId).domains();
         return new TenantOperationsResponse(tenant.tenantId(), tenant.status().name(),
                 tenant.deploymentMode().name(), tenant.domains().size(),
-                tenant.databaseConfig() != null, QuotaResponse.from(quota));
+                tenant.databaseConfig() != null, QuotaResponse.from(quota), domains);
     }
 
     @PostMapping("/cache/invalidate")
@@ -142,7 +169,9 @@ public class SystemAdministrationController {
             HealthResponse dependencies,
             CacheResponse cache,
             List<JobOutcomeRegistry.Outcome> recentJobs,
-            TenantCountResponse tenants) { }
+            TenantCountResponse tenants,
+            TenantOperationsQuery.PlatformRoutingSummary routing,
+            GatewayOperationsClient.GatewayStatusSummary gateway) { }
 
     public record JvmMemoryResponse(long usedBytes, long committedBytes, long maxBytes) { }
 
@@ -157,8 +186,14 @@ public class SystemAdministrationController {
 
     public record TenantCountResponse(long total, long active, long dedicatedDatabases, long domains) { }
 
-    public record TenantOperationsResponse(String tenantId, String status, String deploymentMode,
-            int domainCount, boolean dedicatedDatabaseConfigured, QuotaResponse mediaQuota) { }
+    public record TenantOperationsResponse(
+            String tenantId,
+            String status,
+            String deploymentMode,
+            int domainCount,
+            boolean dedicatedDatabaseConfigured,
+            QuotaResponse mediaQuota,
+            List<TenantOperationsQuery.DomainLifecycleSummary> domains) { }
 
     public record QuotaResponse(long maxAssets, long maxStorageBytes, long usedAssets,
             long usedStorageBytes, long reservedAssets, long reservedBytes) {

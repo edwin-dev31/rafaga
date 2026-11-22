@@ -2,283 +2,152 @@
 
 [![Java 25](https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Spring Boot 4.1.2](https://img.shields.io/badge/Spring%20Boot-4.1.2-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![Gradle](https://img.shields.io/badge/Gradle-9.8.2-02303A?logo=gradle&logoColor=white)](https://gradle.org/)
+[![Spring Modulith 2.1.1](https://img.shields.io/badge/Spring%20Modulith-2.1.1-6DB33F)](https://spring.io/projects/spring-modulith)
+[![Gradle 9.8.2](https://img.shields.io/badge/Gradle-9.8.2-02303A?logo=gradle&logoColor=white)](https://gradle.org/)
 [![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis 8](https://img.shields.io/badge/Redis-8-DC382D?logo=redis&logoColor=white)](https://redis.io/)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Rafaga is a multi-tenant e-commerce SaaS backend built as a Java modular monolith. It supports an incremental tenant evolution from shared infrastructure to dedicated databases and dedicated application instances without forking business logic.
+Rafaga is a multi-tenant e-commerce SaaS backend built as a Java modular monolith. It supports incremental tenant scaling — from shared infrastructure (`SHARED_DB`) to dedicated PostgreSQL databases (`DEDICATED_DB`) and dedicated application instances (`DEDICATED_INSTANCE`) — without forking business logic.
+
+> [!NOTE]
+> All tenants start on the shared PostgreSQL database with forced Row-Level Security (RLS) and can graduate to a dedicated database or dedicated instance at runtime through the super-admin control plane, with zero downtime and instant rollback.
+
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Modules](#modules)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-    clients[Storefronts and Merchant Dashboard] -->|HTTPS| app[Rafaga Spring Boot Application]
+    clients[Storefronts & Merchant Dashboard] -->|HTTPS| edge[Cloudflare & Traefik Gateway]
+    edge -->|Trusted Forwarded Host| app[Rafaga Spring Boot Backend]
 
-    subgraph modules["Modular Monolith"]
-        tenant[Tenant Module]
-        identity[Identity Module]
-        catalog[Catalog Module]
-        inventory[Inventory Module]
-        orders[Orders Module]
+    subgraph monolith["Spring Modulith"]
+        common[common]
+        tenant[tenant]
+        identity[identity]
+        catalog[catalog]
+        inventory[inventory]
+        cart[cart]
+        orders[orders]
+        media[media]
     end
 
-    app --> tenant
-    app --> identity
-    app --> catalog
-    app --> inventory
-    app --> orders
-
-    tenant --> registry[Tenant Registry]
-    tenant --> cache[(Redis Cache)]
-    tenant --> shared[(Shared PostgreSQL)]
-    tenant --> dedicated[(Dedicated PostgreSQL)]
+    app --> monolith
+    tenant --> cache[(Redis)]
+    tenant --> shared[(Shared PostgreSQL + RLS)]
+    tenant --> dedicated[(Dedicated PostgreSQL + RLS)]
+    identity --> keycloak[Keycloak OIDC]
+    media --> r2[Cloudflare R2 + CDN]
 ```
 
-Each module follows `domain`, `application`, and `infrastructure` layers. The tenant application layer is organized by intent:
-
-```text
-application/
-├── command/       # commands and input validation
-├── exception/     # use-case errors
-├── plan/          # plan feature defaults
-├── port/          # infrastructure contracts
-├── resolution/    # tenant resolution contract
-└── service/       # use cases
-```
+Each module is structured in `domain`, `application`, and `infrastructure` layers, with cross-module dependencies restricted to `@NamedInterface("api")` contracts and domain events. See [Architecture Overview](docs/architecture/overview.md) for full details.
 
 ## Modules
 
 | Module | Responsibility |
 | --- | --- |
-| `common` | Cross-cutting contracts, including `TenantContext`. |
-| `tenant` | Tenant registration, configuration, domains, feature flags, caching, and datasource routing. |
-| `identity` | Identity, roles, and Keycloak/OIDC integration. |
+| `common` | Cross-cutting abstractions: `TenantContext`, `JobOutcomeRegistry`, `CorrelationIdPropagation`, and shared domain events. |
+| `tenant` | Tenant registry, domain lifecycle & Cloudflare provisioning, feature flags, deployment targets, controlled transitions, caching, and datasource routing. |
+| `identity` | Keycloak OIDC integration, JWT validation (`iss`/`aud`/roles), layered rate limiting, and user profile synchronization. |
 | `catalog` | Products, categories, and variants. |
-| `inventory` | Stock levels, movements, and reservations. |
-| `orders` | Orders and their lifecycle. |
+| `inventory` | Stock levels, movements, and ShedLock-guarded reservation expiry. |
+| `cart` | Guest and storefront shopping carts and checkout orchestration. |
+| `orders` | Order creation, status transitions, and domain event publication. |
+| `media` | Direct-to-R2 presigned uploads, tenant media quotas, and cleanup/reconciliation jobs. |
 
-## Guides
+## Prerequisites
 
-- [Role and access strategy](docs/role-access-strategy.md)
-- [API guide](docs/api.md)
-- [Deployment guide](docs/deployment-guide.md)
-- [Docker Swarm backend deployment](docs/docker-swarm-deployment.md)
-- [Production operations contract](docs/production-operations-contract.md)
-- [Production secrets and rotation](docs/production-secrets-and-rotation.md)
-- [Developer onboarding](docs/developer-onboarding.md)
-- [Cloudflare r2 and cdn setup](docs/cloudflare-r2-cdn-setup.md)
+- **JDK 25**
+- **Docker** with Compose v2
+- **Git**
 
-## Requirements
+Gradle is bundled via the Gradle Wrapper (`./gradlew` / `.\gradlew.bat`).
 
-- JDK 25
-- Docker Desktop or Docker Engine with Compose v2
-- Git
+## Quick Start
 
-Gradle does not need to be installed globally; the repository includes the Gradle Wrapper.
-
-## Quick start
-
-Run the following commands from the `backend` directory.
-
-```powershell
-Copy-Item .env.example .env
-docker compose up -d
-docker compose run --rm postgres-role-setup
-.\gradlew.bat bootRun
-```
-
-On macOS or Linux:
+From the `backend` directory:
 
 ```bash
+# macOS / Linux
 cp .env.example .env
 docker compose up -d
 docker compose run --rm postgres-role-setup
 ./gradlew bootRun
 ```
 
-The default profile is `dev`. The backend listens on port `3117` unless `RAFAGA_SERVER_PORT` is set. The health endpoint is available at `GET /actuator/health`, and the OpenAPI documentation (dev only) is available at `http://localhost:3117/scalar` with the raw spec at `http://localhost:3117/v3/api-docs`.
-
-For a production deployment, set `SPRING_PROFILES_ACTIVE=production`. Production accepts only `/actuator/health` and its Kubernetes probe groups without authentication; the remaining exposed actuator endpoints require the `SUPER_ADMIN` role and health responses never include component or detail data.
-
-The development compose stack also starts Keycloak and imports the `rafaga` realm from `config/keycloak/import/rafaga-realm.json`. The realm includes the `platform-admin` user, the `SUPER_ADMIN`, `STORE_MANAGER`, and `CUSTOMER` roles, and the `tenant-demo` claim. Development-only Flyway migrations create the matching tenant, its feature flags, and a sample active catalog item (`DEMO-TEE`). Keycloak remains the sole source of roles; the local user projection is populated when a user authenticates.
-
-To authenticate a local client, call the backend rather than Keycloak directly:
-
 ```powershell
-$login = Invoke-RestMethod -Method Post `
-  -Uri http://localhost:3117/api/public/auth/login `
-  -Headers @{ Host = 'demo.rafaga.test' } `
-  -ContentType 'application/json' `
-  -Body '{"username":"platform-admin","password":"rafaga_dev_password"}'
-$token = $login.accessToken
+# Windows (PowerShell)
+Copy-Item .env.example .env
+docker compose up -d
+docker compose run --rm postgres-role-setup
+.\gradlew.bat bootRun
 ```
 
-Use it with `Authorization: Bearer $token` for tenant-scoped endpoints. In dev, loopback hosts (`localhost`, `127.0.0.1`, `::1`) resolve to the `tenant-demo` tenant; use the `Host: demo.rafaga.test` header to exercise domain-based resolution. The Keycloak administration console is at `http://localhost:8080`; credentials are controlled through `.env`.
+> [!TIP]
+> In the `dev` profile (port `3117`), interactive OpenAPI docs are available at `http://localhost:3117/scalar` (raw spec at `/v3/api-docs`), health at `/actuator/health`, and the local Keycloak admin console at `http://localhost:8080`.
 
-To stop the development environment:
+Stop the local stack with `docker compose down`. For local authentication examples and full setup instructions, see [Developer Onboarding](docs/getting-started/developer-onboarding.md).
 
-```powershell
-docker compose down
-```
-
-Development PostgreSQL data is stored in the `rafaga_postgres_data` volume.
+> [!WARNING]
+> Never commit `.env` files or real credentials. In production (`SPRING_PROFILES_ACTIVE=production`), secrets must be injected via your deployment platform or mounted secret files; see [Production Secrets & Rotation](docs/security/production-secrets-and-rotation.md).
 
 ## Testing
 
-Tests use isolated infrastructure: PostgreSQL on port `5433` and Redis on port `6380`. The test database is ephemeral.
-Keycloak is available on port `8081` with the same imported realm.
+Tests run against an isolated Docker Compose stack (`compose.test.yaml`: PostgreSQL on `5433`, Redis on `6380`, Keycloak on `8081`):
 
-```powershell
-docker compose -f compose.test.yaml up -d
+```bash
+docker compose -f compose.test.yaml up -d --wait postgres-test redis-test keycloak-test
 docker compose -f compose.test.yaml run --rm postgres-role-setup-test
-.\gradlew.bat test
+./gradlew test
 docker compose -f compose.test.yaml down
 ```
 
-`AuthenticationEndpointsIntegrationTest` waits for Keycloak's OIDC discovery endpoint, then exercises the public authentication endpoints against the Keycloak service from `compose.test.yaml`, including user registration, login, JWT validation, local synchronization, and domain-based tenant resolution.
+> [!IMPORTANT]
+> Always run `postgres-role-setup-test` after starting a fresh test database so the restricted runtime role (`NOSUPERUSER NOBYPASSRLS`) and forced RLS policies are active. Cross-tenant isolation tests and Spring Modulith boundary tests are mandatory CI gates.
 
-Keycloak imports a realm only when it does not already exist. To apply changes to the checked-in realm definition during local development, remove the local stack with `docker compose down` and start it again.
+For targeted test suites, Testcontainers requirements, and CI jobs, see the [Testing Guide](docs/getting-started/testing.md).
 
-The build automatically activates the Spring `test` profile. Datasource-routing integration tests use Testcontainers and also require Docker.
+## Documentation
 
-To run only the tenant module tests:
+The full documentation is organized under [`docs/`](docs/README.md):
 
-```powershell
-.\gradlew.bat :modules:tenant:test
-```
+| Section | Contents |
+| --- | --- |
+| [Getting Started](docs/README.md#getting-started) | Local onboarding and testing guide |
+| [Architecture](docs/README.md#architecture) | Modular monolith design, multi-tenancy, and Flyway migrations |
+| [API](docs/README.md#api) | Storefront, backoffice, and super-admin API contracts |
+| [Configuration](docs/README.md#configuration) | Environment variables, profiles, and rate-limit tuning |
+| [Security](docs/README.md#security) | Role access strategy, secrets & rotation, and PKCE migration plan |
+| [Operations](docs/README.md#operations) | Deployment, dedicated DB runbook, R2/CDN setup, and production contracts |
 
-### Mandatory tenant-isolation checks
+## Contributing
 
-`CatalogApiIntegrationTest`, `InventoryApiIntegrationTest`, and `OrderApiIntegrationTest` are mandatory PostgreSQL-backed checks. They verify that tenant B cannot read or mutate tenant A data through the API and that the JPA query layer returns no cross-tenant records. New business modules that persist tenant data must add an equivalent integration test and include it in `.github/workflows/tenant-isolation.yml`.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. All changes must respect Spring Modulith boundaries, multi-tenant isolation checks, and conventional commits.
 
-Run the same gate locally after starting `compose.test.yaml`:
+## License
 
-```powershell
-.\gradlew.bat :test --tests com.rafaga.backend.CatalogApiIntegrationTest `
-  --tests com.rafaga.backend.InventoryApiIntegrationTest `
-  --tests com.rafaga.backend.OrderApiIntegrationTest
-```
+This project is licensed under the [MIT License](LICENSE).
 
-## Configuration
+---
 
-Local values can be overridden with environment variables.
+<div align="center">
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `DB_SHARED_URL` | `jdbc:postgresql://localhost:5432/rafaga_shared` | Development shared PostgreSQL URL. |
-| `DB_SHARED_USER` | `rafaga_runtime` | Restricted shared database user for application queries. |
-| `DB_SHARED_PASSWORD` | `rafaga_runtime_dev` | Local development password for the restricted user. |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` | `rafaga_app` / `rafaga_dev` | Database administrator used by Flyway and role setup, never for application queries. |
-| `TEST_DB_SHARED_URL` | `jdbc:postgresql://localhost:5433/rafaga_test` | Test-profile PostgreSQL URL. |
-| `TEST_DB_SHARED_USER` | `rafaga_test_runtime` | Restricted test database user for application queries. |
-| `TEST_DB_SHARED_PASSWORD` | `rafaga_test_runtime` | Test password for the restricted user. |
-| `TEST_POSTGRES_USER` / `TEST_POSTGRES_PASSWORD` | `rafaga_test` / `rafaga_test` | Test database administrator used by Flyway and role setup. |
-| `TEST_REDIS_HOST` | `localhost` | Test Redis host. |
-| `TEST_REDIS_PORT` | `6380` | Test Redis port. |
-| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Development Redis host and port. |
-| `REDIS_CONNECT_TIMEOUT` / `REDIS_TIMEOUT` | `2s` / `2s` | Redis connection and command timeouts. |
-| `REDIS_CLUSTER_NODES` | — | Required production comma-separated `host:port` list for the Redis cluster. |
-| `REDIS_CLUSTER_MAX_REDIRECTS` | `3` | Maximum redirects followed when Redis Cluster moves a slot. |
-| `REDIS_SSL_ENABLED` | `true` | Enables TLS for the production Redis cluster; set according to the managed Redis service. |
-| `KEYCLOAK_JWK_SET_URI` | Local Keycloak JWK endpoint | JWT public keys used by the resource server. |
-| `KEYCLOAK_ISSUER_URI` | Local Keycloak realm URL | Keycloak issuer and OIDC endpoints. |
-| `KEYCLOAK_CLIENT_ID` | — | Confidential client ID used only for direct Keycloak authentication. |
-| `KEYCLOAK_CLIENT_SECRET` | — | Confidential client secret; provide it through the environment, never the repository. |
-| `KEYCLOAK_CONNECT_TIMEOUT` / `KEYCLOAK_READ_TIMEOUT` | `2s` / `5s` | Bounded connection and response times for Keycloak login, provisioning, and health calls. |
-| `KEYCLOAK_ADMIN_CLIENT_ID` | `rafaga-backend-admin` | Service-account client used only by the backend to provision users. |
-| `KEYCLOAK_ADMIN_CLIENT_SECRET` | — | Service-account client secret; provide it through the environment. |
-| `RAFAGA_IDENTITY_REGISTRATION_TOKEN` | — | Global secret required by `POST /api/public/auth/register`; use a long random value. |
-| `RAFAGA_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated static frontend origins accepted by CORS. |
-| `RAFAGA_TRUSTED_PROXY_CIDRS` | — | Comma-separated private Gateway CIDRs whose `X-Forwarded-*` headers may be trusted in production. |
-| `RAFAGA_MAX_REQUEST_CONTENT_LENGTH` | `1MB` | Maximum declared JSON/API body; direct browser image uploads do not pass through the backend. |
-| `RAFAGA_SHUTDOWN_TIMEOUT` | `30s` | Maximum graceful-shutdown phase duration. |
-| `RAFAGA_RATE_LIMIT_*` | See `.env.example` | Production limits for login, registration, Media upload, guest cart mutations, and checkout. Redis shares counters; a stricter bounded local fallback applies if Redis is unavailable. |
-| `KEYCLOAK_ADMIN_USERNAME` | `admin` | Local Keycloak bootstrap administrator. |
-| `KEYCLOAK_ADMIN_PASSWORD` | — | Local Keycloak bootstrap administrator password. |
+<img src="docs/assets/footer.png" alt="Rafaga Backend" width="100%" />
 
-The `dev` profile targets local PostgreSQL, Redis and Keycloak, enables debug logs for tenant resolution and Spring Modulith, and enables the API documentation UI. The Gradle `test` profile uses the isolated PostgreSQL/Redis compose stack; some datasource-routing tests additionally start their own Testcontainers database. The `production` profile requires all database, Keycloak, CORS, registration-token, and Redis cluster variables above. It uses the restricted shared-database role for application traffic, validates Flyway migrations, uses a 50-connection Hikari pool, enables graceful shutdown, validates JWT issuer plus client audience, and never enables internal tenant-header resolution.
+<br />
 
-Every backend response contains `X-Correlation-ID`. Clients may provide a UUID in
-that header to continue a request trace; other values are replaced. The same ID
-is included in structured application logs, while credentials, tokens, and
-request bodies are never logged.
+**Built & maintained by [@edwin-dev31](https://github.com/edwin-dev31)**
 
-Dedicated-database credentials are never stored in `TenantConfig`. `TenantDatabaseCredentialsProvider` is the port used to integrate the appropriate secrets manager.
-The `postgres-role-setup` services create or update the restricted application role and grant table access after PostgreSQL starts. Run them again after changing database credentials. PostgreSQL row-level security is enforced for application queries; Flyway uses the separate administrator connection.
+[![GitHub](https://img.shields.io/badge/GitHub-edwin--dev31-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/edwin-dev31)
 
-## Database migrations
-
-Flyway runs the historical V1-V9 scripts from `src/main/resources/db/migration` without renaming or editing them. Put future migrations in `db/migration/{module}/` and use the next version in one sequence shared by all modules. Flyway scans those subdirectories. Keep the migration SQL compatible with both shared and dedicated databases.
-
-The V4 demo tenant seed is stored separately in `db/dev-migration` and is included by the `dev` profile. A new production or test database does not receive it. If an older database already has V4 in `flyway_schema_history`, startup includes the original V4 script for validation without re-executing it. Each database retains its own Flyway history.
-
-Startup migrates the shared database first and then every registered `DEDICATED_DB` tenant. The first connection to a newly registered dedicated database also runs pending migrations before opening the runtime pool. A failed startup migration stops application startup; a failed lazy migration prevents that tenant connection from opening. Dedicated database migrations require a `TenantDatabaseCredentialsProvider` implementation that supplies restricted runtime credentials via `resolve` and separate schema-owner credentials via `resolveForMigration`. Provision the runtime PostgreSQL role with database connection access before migration. A dedicated tenant without these credentials cannot be served. Flyway creates the schema in the dedicated database, synchronizes its tenant row for the existing foreign keys, and grants table access to the runtime role while keeping `flyway_schema_history` inaccessible to it.
-
-The platform registry tables `tenants`, `tenant_domains`, and `tenant_feature_flags` are read globally for domain resolution and tenant configuration, so they do not use tenant RLS. Business tables, including their association tables, use forced RLS based on `app.current_tenant`; the runtime database role must not own those tables or have `BYPASSRLS`.
-
-## Tenant management API
-
-Administrative tenant endpoints are available under `/api/admin/tenants`.
-
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/api/admin/tenants` | Registers a tenant and initializes its plan feature flags. |
-| `GET` | `/api/admin/tenants` | Lists registered tenants. |
-| `GET` | `/api/admin/tenants/{tenantId}` | Retrieves a tenant configuration. |
-| `PUT` | `/api/admin/tenants/{tenantId}` | Updates tenant configuration, domains, or plan. |
-
-Example request:
-
-```json
-{
-  "name": "Demo Store",
-  "domains": ["demo.rafaga.test"],
-  "deploymentMode": "SHARED_DB",
-  "planId": "starter"
-}
-```
-
-For `DEDICATED_DB`, provide `databaseConfigId` as a secret reference. Never send or persist raw connection credentials in a request body.
-
-These endpoints require the `SUPER_ADMIN` Keycloak role. They bypass tenant resolution because they operate at the platform level.
-
-## Frontend authentication contract
-
-Static frontends authenticate through the backend, not directly with Keycloak. Public endpoints are `POST /api/public/auth/login` and `POST /api/public/auth/register`. Registration requires a `SUPER_ADMIN` bearer token plus `username`, `firstName`, `lastName`, `email`, `password`, and the `X-Registration-Token` header, compared by the backend with the global `RAFAGA_IDENTITY_REGISTRATION_TOKEN` environment secret. The tenant is always resolved from the request domain; registration requests must not include a trusted `tenantId` field.
-
-Keycloak is an internal dependency used by the backend for credential validation and user provisioning. Configure `RAFAGA_ALLOWED_ORIGINS` with the exact origins of the static frontends that may call this API.
-
-The complete role matrix, tenant-crossing rules, onboarding flow, and authorization guidance are documented in [docs/role-access-strategy.md](docs/role-access-strategy.md).
-
-## Database migrations
-
-Flyway runs migrations during application startup. Hibernate runs with `ddl-auto=validate`, so schema changes must be delivered through versioned SQL migrations in `src/main/resources/db/migration`.
-
-- `V1__create_modulith_event_publications.sql`
-- `V2__create_tenant_management.sql`
-
-## Common commands
-
-```powershell
-# Run the full test suite
-.\gradlew.bat test
-
-# Start the application
-.\gradlew.bat bootRun
-
-# Build the executable JAR
-.\gradlew.bat bootJar
-
-# Clean local build artifacts
-.\gradlew.bat clean
-```
-
-## Contribution guidelines
-
-- Communicate across modules through public APIs or events; never access another module's internal entities or repositories.
-- Associate and validate all business data against `TenantContext`.
-- Add or update the Flyway migration in the same change that modifies a persistent model.
-- Run `./gradlew test` before creating a functional commit.
-- Logs are structured JSON and include `tenantId`; never log passwords, OAuth tokens, registration tokens, payment data, or complete request headers.
-- Use conventional commits: `feat(<module>):`, `test(<module>):`, `fix(<module>):`, `refactor(<module>):`, or `chore:`.
+</div>

@@ -1,5 +1,6 @@
 package com.rafaga.backend.identity.infrastructure.keycloak;
 
+import com.rafaga.backend.common.application.CorrelationIdPropagation;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -13,6 +14,16 @@ public class KeycloakClientConfiguration {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(properties.getConnectTimeout());
         requestFactory.setReadTimeout(properties.getReadTimeout());
-        return RestClient.builder().requestFactory(requestFactory).build();
+        return RestClient.builder()
+                .requestFactory(requestFactory)
+                .requestInterceptor((request, body, execution) -> {
+                    CorrelationIdPropagation.applyIfPresent((k, v) -> {
+                        if (request.getHeaders().getFirst(k) == null) {
+                            request.getHeaders().set(k, v);
+                        }
+                    });
+                    return execution.execute(request, body);
+                })
+                .build();
     }
 }

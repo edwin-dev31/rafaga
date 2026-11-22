@@ -21,7 +21,7 @@ validates Keycloak JWTs and reads roles from the `roles` or
 `POST /api/public/auth/login` is public and returns Keycloak tokens through the
 backend. `POST /api/public/auth/register` requires both a `SUPER_ADMIN` token
 and the `X-Registration-Token` header. All other `/api/public/**` paths are
-denied by default. See [role-access-strategy.md](role-access-strategy.md) for
+denied by default. See [role-access-strategy.md](../security/role-access-strategy.md) for
 the complete authorization matrix.
 
 ## Tenant resolution
