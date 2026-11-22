@@ -1,5 +1,6 @@
 package com.rafaga.backend.tenant.infrastructure.target;
 
+import com.rafaga.backend.common.application.CorrelationIdPropagation;
 import com.rafaga.backend.tenant.application.port.DeploymentTargetHealthProbe;
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -20,6 +21,14 @@ public class HttpDeploymentTargetHealthProbe implements DeploymentTargetHealthPr
         factory.setReadTimeout(Duration.ofSeconds(3));
         this.client = RestClient.builder()
                 .requestFactory(factory)
+                .requestInterceptor((request, body, execution) -> {
+                    CorrelationIdPropagation.applyIfPresent((k, v) -> {
+                        if (request.getHeaders().getFirst(k) == null) {
+                            request.getHeaders().set(k, v);
+                        }
+                    });
+                    return execution.execute(request, body);
+                })
                 .build();
     }
 
