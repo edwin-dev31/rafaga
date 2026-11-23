@@ -14,7 +14,7 @@ dependencies {
 	implementation 'software.amazon.awssdk:s3'
 	implementation 'software.amazon.awssdk:url-connection-client'
 
-	implementation 'net.coobird:thumbnailator:0.4.20'
+	implementation 'net.coobird:thumbnailator:0.4.21'
 	implementation 'com.github.usefulness:webp-imageio:0.2.1'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
