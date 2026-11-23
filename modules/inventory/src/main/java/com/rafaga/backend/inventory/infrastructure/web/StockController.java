@@ -1,6 +1,7 @@
 package com.rafaga.backend.inventory.infrastructure.web;
 
 import com.rafaga.backend.inventory.application.service.MovementView;
+import com.rafaga.backend.inventory.application.service.ProductStockSummaryView;
 import com.rafaga.backend.inventory.application.service.StockLevelView;
 import com.rafaga.backend.inventory.application.service.StockService;
 import com.rafaga.backend.tenant.application.RequiresFeature;
@@ -23,6 +24,17 @@ public class StockController {
     private final StockService stock;
 
     public StockController(StockService stock) { this.stock = stock; }
+
+    @GetMapping("/summary")
+    public List<ProductStockSummaryView> summary(
+            @RequestParam(name = "productIds") List<UUID> productIds) {
+        return stock.getStockSummary(productIds);
+    }
+
+    @GetMapping("/{productId}/summary")
+    public ProductStockSummaryView productSummary(@PathVariable("productId") UUID productId) {
+        return stock.getProductStockSummary(productId);
+    }
 
     @GetMapping("/{productId}")
     public StockLevelView get(@PathVariable("productId") UUID productId,

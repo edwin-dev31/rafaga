@@ -12,6 +12,7 @@ import com.rafaga.backend.catalog.domain.event.ProductUpdatedEvent;
 import com.rafaga.backend.catalog.domain.model.Category;
 import com.rafaga.backend.catalog.domain.model.Product;
 import com.rafaga.backend.catalog.domain.model.ProductVariant;
+import com.rafaga.backend.catalog.domain.model.VariantStatus;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.tenant.application.TenantLimitExceededException;
 import com.rafaga.backend.tenant.application.TenantLimitsQuery;
@@ -138,6 +139,55 @@ public class ProductService implements CatalogProductAccess {
         String tenantId = TenantContext.getCurrentTenantId();
         store.deleteProduct(product(productId, tenantId));
         events.publishEvent(new ProductDeletedEvent(productId, tenantId));
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    public ProductView addVariant(UUID productId, CreateProduct.Variant command) {
+        String tenantId = TenantContext.getCurrentTenantId();
+        Product product = product(productId, tenantId);
+        product.addVariant(new ProductVariant(
+                product, command.sku(), command.name(), command.attributes(), command.priceAdjustment()));
+        Product saved = store.saveProduct(product);
+        events.publishEvent(new ProductUpdatedEvent(productId, tenantId, Map.of("variantAdded", command.sku())));
+        return ProductView.from(saved);
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    public ProductView updateVariant(
+            UUID productId,
+            UUID variantId,
+            String sku,
+            String name,
+            Map<String, String> attributes,
+            java.math.BigDecimal priceAdjustment,
+            VariantStatus status) {
+        String tenantId = TenantContext.getCurrentTenantId();
+        Product product = product(productId, tenantId);
+        ProductVariant variant = product.getVariants().stream()
+                .filter(candidate -> variantId.equals(candidate.getId()))
+                .findFirst()
+                .orElseThrow(() -> new CatalogNotFoundException("Product variant", variantId));
+        variant.update(sku, name, attributes, priceAdjustment, status);
+        Product saved = store.saveProduct(product);
+        events.publishEvent(new ProductUpdatedEvent(productId, tenantId, Map.of("variantUpdated", variantId.toString())));
+        return ProductView.from(saved);
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    public ProductView archiveVariant(UUID productId, UUID variantId) {
+        String tenantId = TenantContext.getCurrentTenantId();
+        Product product = product(productId, tenantId);
+        ProductVariant variant = product.getVariants().stream()
+                .filter(candidate -> variantId.equals(candidate.getId()))
+                .findFirst()
+                .orElseThrow(() -> new CatalogNotFoundException("Product variant", variantId));
+        variant.archive();
+        Product saved = store.saveProduct(product);
+        events.publishEvent(new ProductUpdatedEvent(productId, tenantId, Map.of("variantArchived", variantId.toString())));
+        return ProductView.from(saved);
     }
 
     private Product product(UUID id, String tenantId) {

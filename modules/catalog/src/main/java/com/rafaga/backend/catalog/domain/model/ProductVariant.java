@@ -75,6 +75,24 @@ public class ProductVariant {
         this.status = VariantStatus.ACTIVE;
     }
 
+    public void update(String sku, String name, Map<String, String> attributes,
+            BigDecimal priceAdjustment, VariantStatus status) {
+        this.sku = Objects.requireNonNull(sku, "sku must not be null");
+        this.name = Objects.requireNonNull(name, "name must not be null");
+        this.attributes.clear();
+        if (attributes != null) {
+            this.attributes.putAll(attributes);
+        }
+        this.priceAdjustment = Objects.requireNonNull(priceAdjustment, "priceAdjustment must not be null");
+        if (status != null) {
+            this.status = status;
+        }
+    }
+
+    public void archive() {
+        this.status = VariantStatus.INACTIVE;
+    }
+
     public UUID getId() { return id; }
     public String getTenantId() { return tenantId; }
     public Product getProduct() { return product; }

@@ -6,6 +6,7 @@ import com.rafaga.backend.catalog.application.port.ProductSearchFilter;
 import com.rafaga.backend.catalog.application.service.ProductService;
 import com.rafaga.backend.catalog.application.service.ProductView;
 import com.rafaga.backend.catalog.domain.model.ProductStatus;
+import com.rafaga.backend.catalog.domain.model.VariantStatus;
 import com.rafaga.backend.tenant.application.RequiresFeature;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -66,6 +67,36 @@ public class ProductController {
         products.deleteProduct(productId);
     }
 
+    @PostMapping("/{productId}/variants")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProductView addVariant(
+            @PathVariable("productId") UUID productId,
+            @Valid @RequestBody VariantRequest request) {
+        return products.addVariant(productId, request.toCommand());
+    }
+
+    @PutMapping("/{productId}/variants/{variantId}")
+    public ProductView updateVariant(
+            @PathVariable("productId") UUID productId,
+            @PathVariable("variantId") UUID variantId,
+            @Valid @RequestBody UpdateVariantRequest request) {
+        return products.updateVariant(
+                productId,
+                variantId,
+                request.sku(),
+                request.name(),
+                request.attributes() == null ? Map.of() : request.attributes(),
+                request.priceAdjustment(),
+                request.status());
+    }
+
+    @DeleteMapping("/{productId}/variants/{variantId}")
+    public ProductView archiveVariant(
+            @PathVariable("productId") UUID productId,
+            @PathVariable("variantId") UUID variantId) {
+        return products.archiveVariant(productId, variantId);
+    }
+
     @GetMapping
     public Page<ProductView> search(
             @RequestParam(name = "q", required = false) String query,
@@ -101,5 +132,13 @@ public class ProductController {
             @NotNull @DecimalMin("0.00") BigDecimal basePrice,
             @NotNull ProductStatus status,
             Set<UUID> categoryIds) {
+    }
+
+    public record UpdateVariantRequest(
+            @NotBlank String sku,
+            @NotBlank String name,
+            Map<String, String> attributes,
+            @NotNull BigDecimal priceAdjustment,
+            VariantStatus status) {
     }
 }

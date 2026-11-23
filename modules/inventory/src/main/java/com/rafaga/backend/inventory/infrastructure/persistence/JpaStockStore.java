@@ -6,6 +6,7 @@ import com.rafaga.backend.inventory.domain.model.ReservationStatus;
 import com.rafaga.backend.inventory.domain.model.StockLevel;
 import com.rafaga.backend.inventory.domain.model.StockReservation;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,6 +27,14 @@ class JpaStockStore implements StockStore {
 
     public Optional<StockLevel> findLevel(String tenantId, UUID productId, UUID variantId) {
         return levels.findByTenantIdAndProductIdAndVariantId(tenantId, productId, variantId);
+    }
+
+    @Override
+    public List<StockLevel> findLevelsForProducts(String tenantId, Collection<UUID> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        return levels.findByTenantIdAndProductIdIn(tenantId, productIds);
     }
 
     public Optional<StockLevel> lockLevel(String tenantId, UUID productId, UUID variantId) {

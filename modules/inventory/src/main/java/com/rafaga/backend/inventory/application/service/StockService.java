@@ -15,7 +15,10 @@ import com.rafaga.backend.inventory.domain.model.StockLevel;
 import com.rafaga.backend.inventory.domain.model.StockReservation;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +50,60 @@ public class StockService {
         String tenantId = TenantContext.getCurrentTenantId();
         return StockLevelView.from(store.findLevel(tenantId, productId, variantId)
                 .orElseThrow(() -> new StockNotFoundException("Stock level not found")));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProductStockSummaryView> getStockSummary(List<UUID> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        List<StockLevel> levels = store.findLevelsForProducts(tenantId, productIds);
+        Map<UUID, List<StockLevel>> grouped = new LinkedHashMap<>();
+        for (UUID productId : productIds) {
+            grouped.computeIfAbsent(productId, ignored -> new ArrayList<>());
+        }
+        for (StockLevel level : levels) {
+            grouped.computeIfAbsent(level.getProductId(), ignored -> new ArrayList<>()).add(level);
+        }
+        return grouped.entrySet().stream()
+                .map(entry -> toSummary(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ProductStockSummaryView getProductStockSummary(UUID productId) {
+        return getStockSummary(List.of(productId)).getFirst();
+    }
+
+    private ProductStockSummaryView toSummary(UUID productId, List<StockLevel> levels) {
+        int baseAvailable = 0;
+        int variantsAvailable = 0;
+        List<ProductStockSummaryView.VariantStockView> variantViews = new ArrayList<>();
+        for (StockLevel level : levels) {
+            if (level.getVariantId() == null) {
+                baseAvailable = level.getAvailableQuantity();
+            } else {
+                int avail = level.getAvailableQuantity();
+                variantsAvailable += avail;
+                variantViews.add(new ProductStockSummaryView.VariantStockView(
+                        level.getVariantId(),
+                        level.getTotalQuantity(),
+                        level.getReservedQuantity(),
+                        avail,
+                        avail > 0));
+            }
+        }
+        boolean hasVariants = !variantViews.isEmpty();
+        int totalSellable = hasVariants ? variantsAvailable : baseAvailable;
+        return new ProductStockSummaryView(
+                productId,
+                baseAvailable,
+                variantsAvailable,
+                totalSellable,
+                hasVariants,
+                totalSellable > 0,
+                List.copyOf(variantViews));
     }
 
     @Transactional
