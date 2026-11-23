@@ -59,6 +59,10 @@ public class TenantContextFilter extends OncePerRequestFilter {
         try {
             String tenantId = tenantResolver.resolve(request).orElse(null);
             if (tenantId == null) {
+                if (isTenantAgnosticAuthPath(request.getRequestURI())) {
+                    chain.doFilter(request, response);
+                    return;
+                }
                 log.warn("Tenant resolution failed");
                 response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unable to determine tenant for request");
                 return;
@@ -97,6 +101,12 @@ public class TenantContextFilter extends OncePerRequestFilter {
             TenantContext.clear();
             MDC.remove(TenantLoggingInterceptor.TENANT_ID);
         }
+    }
+
+    private boolean isTenantAgnosticAuthPath(String path) {
+        return "/api/public/auth/login".equals(path)
+                || "/api/public/auth/refresh".equals(path)
+                || "/api/public/auth/logout".equals(path);
     }
 
     private boolean isSuperAdmin(Authentication authentication) {

@@ -71,7 +71,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/api/internal/tenant-directory/**").permitAll()
-                        .requestMatchers("/api/public/auth/login").permitAll()
+                        .requestMatchers("/api/public/auth/login", "/api/public/auth/refresh", "/api/public/auth/logout").permitAll()
                         .requestMatchers("/api/public/auth/register").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/public/**").denyAll()
                         .requestMatchers("/api/storefront/**").permitAll()

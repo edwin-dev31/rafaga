@@ -9,6 +9,7 @@ import com.rafaga.backend.identity.application.exception.PasswordPolicyViolation
 import com.rafaga.backend.identity.application.exception.UnauthenticatedUserException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import com.rafaga.backend.tenant.application.TenantLimitExceededException;
+import com.rafaga.backend.tenant.application.exception.TenantNotFoundException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,11 +19,19 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(assignableTypes = {AuthenticationController.class, UserController.class})
+@RestControllerAdvice(assignableTypes = {
+        AuthenticationController.class,
+        UserController.class,
+        TenantUserAdminController.class
+})
 class IdentityExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(IdentityExceptionHandler.class);
 
-    @ExceptionHandler({CrossTenantAccessException.class, IdentityResourceNotFoundException.class})
+    @ExceptionHandler({
+            CrossTenantAccessException.class,
+            IdentityResourceNotFoundException.class,
+            TenantNotFoundException.class
+    })
     @ResponseStatus(HttpStatus.NOT_FOUND)
     Map<String, String> resourceNotFound(RuntimeException exception) {
         return Map.of("message", exception.getMessage());
@@ -46,9 +55,9 @@ class IdentityExceptionHandler {
         return Map.of("message", exception.getMessage());
     }
 
-    @ExceptionHandler(PasswordPolicyViolationException.class)
+    @ExceptionHandler({PasswordPolicyViolationException.class, IllegalArgumentException.class})
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    Map<String, String> passwordPolicyViolation(PasswordPolicyViolationException exception) {
+    Map<String, String> passwordPolicyViolation(RuntimeException exception) {
         return Map.of("message", exception.getMessage());
     }
 
