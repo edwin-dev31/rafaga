@@ -19,24 +19,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TenantService {
+    private static final Logger log = LoggerFactory.getLogger(TenantService.class);
     private final TenantRegistry tenantRegistry;
     private final PlanFeatureDefaults planFeatureDefaults;
     private final ApplicationEventPublisher eventPublisher;
     private final TenantLimitsService limitsService;
+    private final TenantDirectoryService directoryService;
 
     public TenantService(
             TenantRegistry tenantRegistry,
             PlanFeatureDefaults planFeatureDefaults,
             ApplicationEventPublisher eventPublisher) {
-        this(tenantRegistry, planFeatureDefaults, eventPublisher, (TenantLimitsService) null);
+        this(tenantRegistry, planFeatureDefaults, eventPublisher, (TenantLimitsService) null, null);
     }
 
     @Autowired
@@ -44,8 +50,14 @@ public class TenantService {
             TenantRegistry tenantRegistry,
             PlanFeatureDefaults planFeatureDefaults,
             ApplicationEventPublisher eventPublisher,
-            ObjectProvider<TenantLimitsService> limitsServiceProvider) {
-        this(tenantRegistry, planFeatureDefaults, eventPublisher, limitsServiceProvider.getIfAvailable());
+            ObjectProvider<TenantLimitsService> limitsServiceProvider,
+            ObjectProvider<TenantDirectoryService> directoryServiceProvider) {
+        this(
+                tenantRegistry,
+                planFeatureDefaults,
+                eventPublisher,
+                limitsServiceProvider.getIfAvailable(),
+                directoryServiceProvider.getIfAvailable());
     }
 
     TenantService(
@@ -53,10 +65,20 @@ public class TenantService {
             PlanFeatureDefaults planFeatureDefaults,
             ApplicationEventPublisher eventPublisher,
             TenantLimitsService limitsService) {
+        this(tenantRegistry, planFeatureDefaults, eventPublisher, limitsService, null);
+    }
+
+    TenantService(
+            TenantRegistry tenantRegistry,
+            PlanFeatureDefaults planFeatureDefaults,
+            ApplicationEventPublisher eventPublisher,
+            TenantLimitsService limitsService,
+            TenantDirectoryService directoryService) {
         this.tenantRegistry = tenantRegistry;
         this.planFeatureDefaults = planFeatureDefaults;
         this.eventPublisher = eventPublisher;
         this.limitsService = limitsService;
+        this.directoryService = directoryService;
     }
 
     @Transactional
@@ -87,12 +109,19 @@ public class TenantService {
     public TenantConfig updateTenant(String tenantId, TenantUpdate update) {
         TenantConfig current = getTenantById(tenantId);
         boolean planChanged = !current.planId().equals(update.planId());
+        DatabaseConfig effectiveDatabaseConfig = (update.databaseConfigId() == null || update.databaseConfigId().isBlank())
+                ? current.databaseConfig()
+                : databaseConfig(update.databaseConfigId());
+        if (update.deploymentMode() == com.rafaga.backend.tenant.domain.model.DeploymentMode.DEDICATED_DB
+                && effectiveDatabaseConfig == null) {
+            throw new IllegalArgumentException("Dedicated database tenants require a databaseConfigId");
+        }
         TenantConfig updated = new TenantConfig(
                 current.tenantId(),
                 update.name(),
                 update.domains(),
                 update.deploymentMode(),
-                databaseConfig(update.databaseConfigId()),
+                effectiveDatabaseConfig,
                 update.planId(),
                 current.status(),
                 current.featureFlags());
@@ -131,8 +160,41 @@ public class TenantService {
                 TenantStatus.INACTIVE,
                 current.featureFlags());
         tenantRegistry.update(inactive);
+        if (directoryService != null) {
+            directoryService.suspendAllDomainsForTenant(tenantId);
+        }
         eventPublisher.publishEvent(new TenantStatusChangedEvent(tenantId, current.status(), TenantStatus.INACTIVE));
+        log.info("event=tenant.deactivate outcome=SUCCESS tenantId={} actor={}", tenantId, currentActor());
         return inactive;
+    }
+
+    @Transactional
+    public TenantConfig reactivateTenant(String tenantId) {
+        TenantConfig current = getTenantById(tenantId);
+        if (current.status() == TenantStatus.ACTIVE) {
+            return current;
+        }
+        TenantConfig active = new TenantConfig(
+                current.tenantId(),
+                current.name(),
+                current.domains(),
+                current.deploymentMode(),
+                current.databaseConfig(),
+                current.planId(),
+                TenantStatus.ACTIVE,
+                current.featureFlags());
+        tenantRegistry.update(active);
+        if (directoryService != null) {
+            directoryService.reactivateSuspendedDomainsForTenant(tenantId);
+        }
+        eventPublisher.publishEvent(new TenantStatusChangedEvent(tenantId, current.status(), TenantStatus.ACTIVE));
+        log.info("event=tenant.reactivate outcome=SUCCESS tenantId={} actor={}", tenantId, currentActor());
+        return active;
+    }
+
+    private String currentActor() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getName() != null ? authentication.getName() : "system";
     }
 
     private DatabaseConfig databaseConfig(String databaseConfigId) {

@@ -15,6 +15,5 @@ public record TenantUpdate(
         domains = TenantCommandValidation.normalizeDomains(domains);
         Objects.requireNonNull(deploymentMode, "deploymentMode must not be null");
         Objects.requireNonNull(planId, "planId must not be null");
-        TenantCommandValidation.requireDatabaseConfigForDedicatedMode(deploymentMode, databaseConfigId);
     }
 }

@@ -255,6 +255,21 @@ public class TenantDirectoryService {
         }
     }
 
+    @Transactional
+    public void reactivateSuspendedDomainsForTenant(String tenantId) {
+        List<TenantDomainControl> tenantDomains = domains.findByTenantIdOrderByDomain(tenantId);
+        Instant now = Instant.now(clock);
+        for (TenantDomainControl domain : tenantDomains) {
+            if (domain.getStatus() == DomainStatus.SUSPENDED
+                    && domain.getFrontendOrigin() != null
+                    && !domain.getFrontendOrigin().isBlank()) {
+                long version = advanceVersion(now);
+                domain.transition(DomainStatus.ACTIVE, version, now);
+                events.publishEvent(new TenantDirectoryChangedEvent(version, domain.getDomain()));
+            }
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<TenantDomainView> domains(String tenantId) {
         Map<String, DeploymentTargetType> targetTypes = targets.findAll().stream()
