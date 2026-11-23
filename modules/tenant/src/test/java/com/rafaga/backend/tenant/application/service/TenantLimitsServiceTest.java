@@ -15,7 +15,6 @@ import com.rafaga.backend.tenant.domain.event.TenantLimitsUpdatedEvent;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.domain.model.TenantStatus;
-import com.rafaga.backend.tenant.infrastructure.persistence.DeploymentTargetEntity;
 import com.rafaga.backend.tenant.infrastructure.persistence.DeploymentTargetRepository;
 import com.rafaga.backend.tenant.infrastructure.persistence.TenantDirectoryStateRepository;
 import com.rafaga.backend.tenant.infrastructure.persistence.TenantDomainControlRepository;
@@ -101,8 +100,7 @@ class TenantLimitsServiceTest {
                 "tenant-1", "Tienda", List.of("tienda.test"), DeploymentMode.SHARED_DB,
                 null, "starter", TenantStatus.ACTIVE, Map.of());
         when(registry.findById("tenant-1")).thenReturn(Optional.of(tenant));
-        when(targets.findById(TenantDirectoryService.DEFAULT_SHARED_POOL_TARGET_ID))
-                .thenReturn(Optional.of(mock(DeploymentTargetEntity.class)));
+        when(targets.existsById(TenantDirectoryService.DEFAULT_SHARED_POOL_TARGET_ID)).thenReturn(true);
         when(domains.findByDomain("extra.tienda.test")).thenReturn(Optional.empty());
         when(domains.countByTenantId("tenant-1")).thenReturn(1L);
         when(limitsService.getLimits("tenant-1")).thenReturn(PlanLimitsDefaults.forPlan("tenant-1", "starter", NOW));
