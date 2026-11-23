@@ -6,6 +6,7 @@ import com.rafaga.backend.identity.application.exception.IdentityProviderUnavail
 import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
 import com.rafaga.backend.identity.application.exception.InvalidCredentialsException;
 import com.rafaga.backend.identity.application.exception.InvalidRegistrationTokenException;
+import com.rafaga.backend.identity.application.exception.PasswordPolicyViolationException;
 import com.rafaga.backend.identity.application.exception.UnauthenticatedUserException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import com.rafaga.backend.identity.application.port.AuthenticationPort;
@@ -111,6 +112,62 @@ public class UserService {
     @Transactional
     public UserProfile synchronizeCurrentUser(String accessToken) {
         return synchronizeProfile(authenticationPort.syncUserFromKeycloak(accessToken));
+    }
+
+    @Transactional
+    public void changeCurrentUserPassword(String currentPassword, String newPassword) {
+        String tenantId = currentTenantId();
+        Jwt jwt = currentJwt();
+        String jwtTenantId = jwt.getClaimAsString("tenant_id");
+        if (jwtTenantId != null && !tenantId.equals(jwtTenantId)) {
+            log.warn("event=auth.password_change outcome=CROSS_TENANT_DENIED tenantId={}", tenantId);
+            throw new CrossTenantAccessException();
+        }
+        if (currentPassword == null || currentPassword.isBlank() || newPassword == null || newPassword.isBlank()) {
+            throw new PasswordPolicyViolationException("Current and new password must not be blank");
+        }
+        if (currentPassword.equals(newPassword)) {
+            throw new PasswordPolicyViolationException("New password must be different from current password");
+        }
+        String username = jwt.getClaimAsString("preferred_username");
+        if (username == null || username.isBlank()) {
+            username = findUser(jwt.getSubject()).getUsername();
+        }
+        try {
+            authenticationPort.login(username, currentPassword);
+            authenticationPort.updatePassword(jwt.getSubject(), newPassword, false);
+            log.info("event=auth.password_change outcome=SUCCESS tenantId={}", tenantId);
+        } catch (InvalidCredentialsException exception) {
+            log.warn("event=auth.password_change outcome=INVALID_CREDENTIALS tenantId={}", tenantId);
+            throw exception;
+        } catch (PasswordPolicyViolationException exception) {
+            log.warn("event=auth.password_change outcome=POLICY_VIOLATION tenantId={}", tenantId);
+            throw exception;
+        } catch (IdentityProviderUnavailableException exception) {
+            log.warn("event=auth.password_change outcome=IDP_UNAVAILABLE tenantId={}", tenantId);
+            throw exception;
+        }
+    }
+
+    @Transactional
+    public void resetUserPassword(UUID userId, String newPassword, boolean temporary) {
+        String tenantId = currentTenantId();
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new PasswordPolicyViolationException("New password must not be blank");
+        }
+        User user = findUser(tenantId, userId);
+        try {
+            authenticationPort.updatePassword(user.getKeycloakId(), newPassword, temporary);
+            log.info("event=auth.password_reset outcome=SUCCESS tenantId={} targetUserId={}", tenantId, userId);
+        } catch (PasswordPolicyViolationException exception) {
+            log.warn("event=auth.password_reset outcome=POLICY_VIOLATION tenantId={} targetUserId={}",
+                    tenantId, userId);
+            throw exception;
+        } catch (IdentityProviderUnavailableException exception) {
+            log.warn("event=auth.password_reset outcome=IDP_UNAVAILABLE tenantId={} targetUserId={}",
+                    tenantId, userId);
+            throw exception;
+        }
     }
 
     private UserProfile synchronizeProfile(IdentityProfile profile) {

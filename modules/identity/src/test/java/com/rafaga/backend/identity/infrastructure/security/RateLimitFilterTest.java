@@ -32,6 +32,7 @@ class RateLimitFilterTest {
         properties = new RateLimitProperties();
         properties.setWindow(java.time.Duration.ofMinutes(1));
         properties.setLoginPerWindow(4);
+        properties.setPasswordChangePerWindow(4);
         properties.setRegistrationPerWindow(4);
         properties.setMediaUploadPerWindow(4);
         properties.setMediaConfirmationPerWindow(4);
@@ -68,6 +69,17 @@ class RateLimitFilterTest {
         assertThat(send("PUT", "/api/storefront/carts/current/items", "198.51.100.13").getStatus()).isEqualTo(200);
         assertThat(send("POST", "/api/storefront/carts/current/checkout", "198.51.100.13").getStatus()).isEqualTo(200);
         assertThat(send("POST", "/api/orders", "198.51.100.13").getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void rejectsPasswordChangeAfterExceedingRateLimit() throws Exception {
+        assertThat(send("PUT", "/api/users/me/password", "198.51.100.15").getStatus()).isEqualTo(200);
+        assertThat(send("PUT", "/api/users/me/password", "198.51.100.15").getStatus()).isEqualTo(200);
+
+        MockHttpServletResponse rejected = send("PUT", "/api/users/me/password", "198.51.100.15");
+
+        assertThat(rejected.getStatus()).isEqualTo(429);
+        assertThat(rejected.getContentAsString()).contains("RATE_LIMITED");
     }
 
     @Test

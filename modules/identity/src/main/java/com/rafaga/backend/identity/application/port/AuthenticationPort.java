@@ -10,4 +10,6 @@ public interface AuthenticationPort {
     IdentityProfile syncUserFromKeycloak(String accessToken);
 
     IdentityProfile registerUser(String tenantId, UserRegistration registration);
+
+    void updatePassword(String keycloakId, String newPassword, boolean temporary);
 }

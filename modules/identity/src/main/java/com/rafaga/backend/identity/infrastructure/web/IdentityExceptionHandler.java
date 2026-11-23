@@ -5,12 +5,14 @@ import com.rafaga.backend.identity.application.exception.IdentityProviderUnavail
 import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
 import com.rafaga.backend.identity.application.exception.InvalidRegistrationTokenException;
 import com.rafaga.backend.identity.application.exception.InvalidCredentialsException;
+import com.rafaga.backend.identity.application.exception.PasswordPolicyViolationException;
 import com.rafaga.backend.identity.application.exception.UnauthenticatedUserException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -41,6 +43,18 @@ class IdentityExceptionHandler {
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     Map<String, String> invalidCredentials(InvalidCredentialsException exception) {
         return Map.of("message", exception.getMessage());
+    }
+
+    @ExceptionHandler(PasswordPolicyViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    Map<String, String> passwordPolicyViolation(PasswordPolicyViolationException exception) {
+        return Map.of("message", exception.getMessage());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    Map<String, String> validationFailed(MethodArgumentNotValidException exception) {
+        return Map.of("message", "Request validation failed");
     }
 
     @ExceptionHandler(UserAlreadyExistsException.class)
