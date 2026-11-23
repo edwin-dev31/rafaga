@@ -1,11 +1,11 @@
 package com.rafaga.backend.identity.infrastructure.web;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
+import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
 import com.rafaga.backend.identity.application.port.UserRegistration;
 import com.rafaga.backend.identity.application.service.UserProfile;
 import com.rafaga.backend.identity.application.service.UserService;
 import com.rafaga.backend.identity.domain.model.UserStatus;
-import com.rafaga.backend.tenant.application.exception.TenantNotFoundException;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -80,7 +80,8 @@ public class TenantUserAdminController {
     }
 
     private <T> T inTenant(String tenantId, Supplier<T> action) {
-        tenantRegistry.findById(tenantId).orElseThrow(() -> new TenantNotFoundException(tenantId));
+        tenantRegistry.findById(tenantId)
+                .orElseThrow(() -> new IdentityResourceNotFoundException("Tenant", tenantId));
         String previousTenantId = TenantContext.isSet() ? TenantContext.getCurrentTenantId() : null;
         TenantContext.setCurrentTenantId(tenantId);
         try {

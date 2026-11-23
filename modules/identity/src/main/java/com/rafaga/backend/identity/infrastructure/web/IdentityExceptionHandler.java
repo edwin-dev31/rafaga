@@ -9,7 +9,6 @@ import com.rafaga.backend.identity.application.exception.PasswordPolicyViolation
 import com.rafaga.backend.identity.application.exception.UnauthenticatedUserException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import com.rafaga.backend.tenant.application.TenantLimitExceededException;
-import com.rafaga.backend.tenant.application.exception.TenantNotFoundException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +28,7 @@ class IdentityExceptionHandler {
 
     @ExceptionHandler({
             CrossTenantAccessException.class,
-            IdentityResourceNotFoundException.class,
-            TenantNotFoundException.class
+            IdentityResourceNotFoundException.class
     })
     @ResponseStatus(HttpStatus.NOT_FOUND)
     Map<String, String> resourceNotFound(RuntimeException exception) {
