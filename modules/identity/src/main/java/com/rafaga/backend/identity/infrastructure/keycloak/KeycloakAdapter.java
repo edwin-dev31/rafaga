@@ -7,7 +7,9 @@ import com.rafaga.backend.identity.application.port.IdentityProfile;
 import com.rafaga.backend.identity.application.port.TokenValidationResult;
 import com.rafaga.backend.identity.application.port.UserRegistration;
 import com.rafaga.backend.identity.application.exception.IdentityProviderUnavailableException;
+import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
 import com.rafaga.backend.identity.application.exception.InvalidCredentialsException;
+import com.rafaga.backend.identity.application.exception.PasswordPolicyViolationException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import java.net.URI;
 import java.util.List;
@@ -140,6 +142,37 @@ public class KeycloakAdapter implements AuthenticationPort {
         return new IdentityProfile(keycloakId, registration.username(), registration.email(), tenantId);
     }
 
+    @Override
+    public void updatePassword(String keycloakId, String newPassword, boolean temporary) {
+        String adminAccessToken;
+        try {
+            adminAccessToken = requestAdminAccessToken();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.password_update outcome=IDP_UNAVAILABLE reason=admin_token_fetch_failed");
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        }
+        try {
+            restClient.put()
+                    .uri(adminResetPasswordUri(keycloakId))
+                    .headers(headers -> headers.setBearerAuth(adminAccessToken))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new KeycloakCredential("password", newPassword, temporary))
+                    .retrieve()
+                    .toBodilessEntity();
+            log.info("event=keycloak.password_update outcome=SUCCESS");
+        } catch (HttpClientErrorException.NotFound exception) {
+            throw new IdentityResourceNotFoundException("User", keycloakId);
+        } catch (HttpClientErrorException.BadRequest exception) {
+            log.warn("event=keycloak.password_update outcome=POLICY_VIOLATION");
+            throw new PasswordPolicyViolationException("Password does not meet security policy requirements");
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.password_update outcome=IDP_UNAVAILABLE reason=reset_password_failed");
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        } catch (HttpClientErrorException exception) {
+            throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
+        }
+    }
+
     private AuthenticationTokens requestUserTokens(String username, String password) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "password");
@@ -179,6 +212,10 @@ public class KeycloakAdapter implements AuthenticationPort {
 
     private String adminUsersUri() {
         return issuerUri().replace("/realms/", "/admin/realms/") + "/users";
+    }
+
+    private String adminResetPasswordUri(String keycloakId) {
+        return adminUsersUri() + "/" + keycloakId + "/reset-password";
     }
 
     private String adminRoleUri(String keycloakId) {

@@ -4,13 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.identity.application.exception.CrossTenantAccessException;
 import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
+import com.rafaga.backend.identity.application.exception.InvalidCredentialsException;
 import com.rafaga.backend.identity.application.exception.InvalidRegistrationTokenException;
+import com.rafaga.backend.identity.application.exception.PasswordPolicyViolationException;
 import com.rafaga.backend.identity.application.port.AuthenticationPort;
 import com.rafaga.backend.identity.application.port.AuthenticationTokens;
 import com.rafaga.backend.identity.application.port.IdentityProfile;
@@ -119,6 +122,103 @@ class UserServiceTest {
                 "invalid-token",
                 new UserRegistration("person", "Person", "Example", "person@example.test", "secret")))
                 .isInstanceOf(InvalidRegistrationTokenException.class);
+    }
+
+    @Test
+    void changesCurrentUserPasswordAfterVerifyingCurrentCredentials() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        when(authentication.login("person", "CurrentPass123!"))
+                .thenReturn(new AuthenticationTokens("access", "refresh", "Bearer", 300));
+        authenticateJwt("keycloak-1", "person", TENANT_ID);
+        UserService service = service(authentication, mock(IdentityStore.class));
+
+        service.changeCurrentUserPassword("CurrentPass123!", "NewStrongPass456!");
+
+        verify(authentication).login("person", "CurrentPass123!");
+        verify(authentication).updatePassword("keycloak-1", "NewStrongPass456!", false);
+    }
+
+    @Test
+    void rejectsCurrentUserPasswordChangeWhenCurrentPasswordIsInvalid() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        when(authentication.login("person", "WrongPass123!")).thenThrow(new InvalidCredentialsException());
+        authenticateJwt("keycloak-1", "person", TENANT_ID);
+        UserService service = service(authentication, mock(IdentityStore.class));
+
+        assertThatThrownBy(() -> service.changeCurrentUserPassword("WrongPass123!", "NewStrongPass456!"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        verify(authentication, never()).updatePassword(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    void rejectsCurrentUserPasswordChangeWhenJwtBelongsToAnotherTenant() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        authenticateJwt("keycloak-1", "person", "tenant-b");
+        UserService service = service(authentication, mock(IdentityStore.class));
+
+        assertThatThrownBy(() -> service.changeCurrentUserPassword("CurrentPass123!", "NewStrongPass456!"))
+                .isInstanceOf(CrossTenantAccessException.class);
+        verify(authentication, never()).login(any(), any());
+        verify(authentication, never()).updatePassword(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    void rejectsCurrentUserPasswordChangeWhenNewPasswordMatchesCurrentPassword() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        authenticateJwt("keycloak-1", "person", TENANT_ID);
+        UserService service = service(authentication, mock(IdentityStore.class));
+
+        assertThatThrownBy(() -> service.changeCurrentUserPassword("SamePass123!", "SamePass123!"))
+                .isInstanceOf(PasswordPolicyViolationException.class);
+        verify(authentication, never()).login(any(), any());
+        verify(authentication, never()).updatePassword(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    void resetsUserPasswordForUserWithinCurrentTenant() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        IdentityStore store = mock(IdentityStore.class);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        UUID userId = UUID.randomUUID();
+        User user = new User(TENANT_ID, "keycloak-99", "manager", "manager@example.test", Instant.now());
+        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
+        UserService service = service(authentication, store);
+
+        service.resetUserPassword(userId, "AdminResetPass123!", true);
+
+        verify(authentication).updatePassword("keycloak-99", "AdminResetPass123!", true);
+    }
+
+    @Test
+    void rejectsAdminPasswordResetWhenUserDoesNotBelongToCurrentTenant() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        IdentityStore store = mock(IdentityStore.class);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        UUID otherTenantUserId = UUID.randomUUID();
+        when(store.findUserById(TENANT_ID, otherTenantUserId)).thenReturn(Optional.empty());
+        UserService service = service(authentication, store);
+
+        assertThatThrownBy(() -> service.resetUserPassword(otherTenantUserId, "AdminResetPass123!", false))
+                .isInstanceOf(IdentityResourceNotFoundException.class);
+        verify(authentication, never()).updatePassword(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    private void authenticateJwt(String subject, String username, String tenantId) {
+        Jwt jwt = new Jwt(
+                "token",
+                Instant.now(),
+                Instant.now().plusSeconds(300),
+                Map.of("alg", "none"),
+                Map.of(
+                        "sub", subject,
+                        "preferred_username", username,
+                        "email", username + "@example.test",
+                        "tenant_id", tenantId));
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt));
     }
 
     private UserService service(AuthenticationPort authentication, IdentityStore store) {

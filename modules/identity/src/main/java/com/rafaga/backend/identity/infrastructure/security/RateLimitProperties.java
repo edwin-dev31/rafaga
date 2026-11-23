@@ -12,6 +12,7 @@ public class RateLimitProperties {
     private boolean enabled = true;
     private Duration window = Duration.ofMinutes(1);
     private int loginPerWindow = 10;
+    private int passwordChangePerWindow = 5;
     private int registrationPerWindow = 3;
     private int mediaUploadPerWindow = 12;
     private int mediaConfirmationPerWindow = 24;
@@ -42,6 +43,14 @@ public class RateLimitProperties {
 
     public void setLoginPerWindow(int loginPerWindow) {
         this.loginPerWindow = loginPerWindow;
+    }
+
+    public int getPasswordChangePerWindow() {
+        return passwordChangePerWindow;
+    }
+
+    public void setPasswordChangePerWindow(int passwordChangePerWindow) {
+        this.passwordChangePerWindow = passwordChangePerWindow;
     }
 
     public int getRegistrationPerWindow() {

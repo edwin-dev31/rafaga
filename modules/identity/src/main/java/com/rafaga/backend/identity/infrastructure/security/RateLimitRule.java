@@ -20,6 +20,17 @@ enum RateLimitRule {
             return remoteAddress(request);
         }
     },
+    PASSWORD_CHANGE("password-change") {
+        @Override
+        boolean matches(String method, String path) {
+            return "PUT".equals(method) && "/api/users/me/password".equals(path);
+        }
+
+        @Override
+        int limit(RateLimitProperties properties) {
+            return properties.getPasswordChangePerWindow();
+        }
+    },
     REGISTRATION("registration") {
         @Override
         boolean matches(String method, String path) {
