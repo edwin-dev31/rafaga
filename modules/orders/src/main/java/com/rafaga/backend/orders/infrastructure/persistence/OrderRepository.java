@@ -8,8 +8,9 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
-interface OrderRepository extends JpaRepository<Order, UUID> {
+interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecificationExecutor<Order> {
     Optional<Order> findByIdAndTenantId(UUID id, String tenantId);
     Page<Order> findAllByTenantId(String tenantId, Pageable pageable);
     List<Order> findByTenantIdAndCustomerId(String tenantId, UUID customerId);

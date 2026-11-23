@@ -2,6 +2,7 @@ package com.rafaga.backend.catalog.infrastructure.web;
 
 import com.rafaga.backend.catalog.application.command.CreateProduct;
 import com.rafaga.backend.catalog.application.command.UpdateProduct;
+import com.rafaga.backend.catalog.application.port.ProductSearchFilter;
 import com.rafaga.backend.catalog.application.service.ProductService;
 import com.rafaga.backend.catalog.application.service.ProductView;
 import com.rafaga.backend.catalog.domain.model.ProductStatus;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -65,8 +67,12 @@ public class ProductController {
     }
 
     @GetMapping
-    public Page<ProductView> search(Pageable pageable) {
-        return products.searchProducts(pageable);
+    public Page<ProductView> search(
+            @RequestParam(name = "q", required = false) String query,
+            @RequestParam(name = "status", required = false) ProductStatus status,
+            @RequestParam(name = "categoryId", required = false) UUID categoryId,
+            Pageable pageable) {
+        return products.searchProducts(new ProductSearchFilter(query, status, categoryId), pageable);
     }
 
     public record CreateRequest(

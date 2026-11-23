@@ -12,6 +12,9 @@ public interface OrderStore {
     Order save(Order order);
     Optional<Order> find(UUID orderId, String tenantId);
     Page<Order> findAll(String tenantId, Pageable pageable);
+    default Page<Order> findAll(String tenantId, OrderSearchFilter filter, Pageable pageable) {
+        return findAll(tenantId, pageable);
+    }
     List<Order> findByCustomer(String tenantId, UUID customerId);
     List<Order> findByStatus(String tenantId, OrderStatus status);
 }

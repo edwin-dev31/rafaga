@@ -17,6 +17,9 @@ public interface CatalogStore {
         return 0L;
     }
     Page<Product> searchProducts(String tenantId, Pageable pageable);
+    default Page<Product> searchProducts(String tenantId, ProductSearchFilter filter, Pageable pageable) {
+        return searchProducts(tenantId, pageable);
+    }
     void deleteProduct(Product product);
     Category saveCategory(Category category);
     Optional<Category> findCategory(UUID id, String tenantId);

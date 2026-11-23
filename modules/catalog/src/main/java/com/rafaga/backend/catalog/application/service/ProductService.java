@@ -5,6 +5,7 @@ import com.rafaga.backend.catalog.application.command.UpdateProduct;
 import com.rafaga.backend.catalog.application.exception.CatalogConflictException;
 import com.rafaga.backend.catalog.application.exception.CatalogNotFoundException;
 import com.rafaga.backend.catalog.application.port.CatalogStore;
+import com.rafaga.backend.catalog.application.port.ProductSearchFilter;
 import com.rafaga.backend.catalog.domain.event.ProductCreatedEvent;
 import com.rafaga.backend.catalog.domain.event.ProductDeletedEvent;
 import com.rafaga.backend.catalog.domain.event.ProductUpdatedEvent;
@@ -119,7 +120,16 @@ public class ProductService implements CatalogProductAccess {
 
     @Transactional(readOnly = true)
     public Page<ProductView> searchProducts(Pageable pageable) {
-        return store.searchProducts(TenantContext.getCurrentTenantId(), pageable).map(ProductView::from);
+        return searchProducts(ProductSearchFilter.empty(), pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ProductView> searchProducts(ProductSearchFilter filter, Pageable pageable) {
+        String tenantId = TenantContext.getCurrentTenantId();
+        if (filter == null || filter.isEmpty()) {
+            return store.searchProducts(tenantId, pageable).map(ProductView::from);
+        }
+        return store.searchProducts(tenantId, filter, pageable).map(ProductView::from);
     }
 
     @Transactional

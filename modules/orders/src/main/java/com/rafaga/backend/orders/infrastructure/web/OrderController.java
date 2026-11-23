@@ -1,6 +1,7 @@
 package com.rafaga.backend.orders.infrastructure.web;
 
 import com.rafaga.backend.orders.application.command.CreateOrder;
+import com.rafaga.backend.orders.application.port.OrderSearchFilter;
 import com.rafaga.backend.orders.application.service.OrderService;
 import com.rafaga.backend.orders.application.service.OrderView;
 import com.rafaga.backend.orders.domain.model.OrderStatus;
@@ -9,6 +10,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -58,8 +61,13 @@ public class OrderController {
     }
 
     @GetMapping
-    public Page<OrderView> list(Pageable pageable) {
-        return orders.getOrders(pageable);
+    public Page<OrderView> list(
+            @RequestParam(name = "status", required = false) OrderStatus status,
+            @RequestParam(name = "customerId", required = false) UUID customerId,
+            @RequestParam(name = "from", required = false) Instant from,
+            @RequestParam(name = "to", required = false) Instant to,
+            Pageable pageable) {
+        return orders.getOrders(new OrderSearchFilter(status, customerId, from, to), pageable);
     }
 
     public record CreateRequest(@NotNull UUID customerId,

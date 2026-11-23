@@ -11,6 +11,7 @@ import com.rafaga.backend.inventory.application.service.StockService;
 import com.rafaga.backend.orders.application.command.CreateOrder;
 import com.rafaga.backend.orders.application.exception.OrderConflictException;
 import com.rafaga.backend.orders.application.exception.OrderNotFoundException;
+import com.rafaga.backend.orders.application.port.OrderSearchFilter;
 import com.rafaga.backend.orders.application.port.OrderStore;
 import com.rafaga.backend.orders.domain.event.OrderCompletedEvent;
 import com.rafaga.backend.orders.domain.event.OrderCreatedEvent;
@@ -77,7 +78,19 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public Page<OrderView> getOrders(Pageable pageable) {
-        return store.findAll(TenantContext.getCurrentTenantId(), pageable).map(OrderView::from);
+        return getOrders(OrderSearchFilter.empty(), pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderView> getOrders(OrderSearchFilter filter, Pageable pageable) {
+        if (filter != null && filter.from() != null && filter.to() != null && filter.from().isAfter(filter.to())) {
+            throw new IllegalArgumentException("'from' must not be after 'to'");
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        if (filter == null || filter.isEmpty()) {
+            return store.findAll(tenantId, pageable).map(OrderView::from);
+        }
+        return store.findAll(tenantId, filter, pageable).map(OrderView::from);
     }
 
     @Transactional
