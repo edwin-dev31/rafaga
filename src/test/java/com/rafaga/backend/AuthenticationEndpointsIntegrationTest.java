@@ -82,16 +82,17 @@ class AuthenticationEndpointsIntegrationTest {
                 "pro",
                 TenantStatus.ACTIVE,
                 Map.of("catalog", true)));
-        tenantLimitsService.syncWithPlan(TENANT_ID, "pro");
+        tenantLimitsService.updateLimits(TENANT_ID, "pro", null, null, null, 100, null);
         tenantRegistry.register(new TenantConfig(
                 SECOND_TENANT_ID,
                 "Second Store",
                 List.of(SECOND_TENANT_DOMAIN),
                 DeploymentMode.SHARED_DB,
                 null,
-                "starter",
+                "pro",
                 TenantStatus.ACTIVE,
                 Map.of("catalog", true)));
+        tenantLimitsService.updateLimits(SECOND_TENANT_ID, "pro", null, null, null, 100, null);
     }
 
     @Test
