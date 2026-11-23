@@ -35,6 +35,11 @@ class JpaCatalogStore implements CatalogStore {
     }
 
     @Override
+    public long countProducts(String tenantId) {
+        return products.countByTenantId(tenantId);
+    }
+
+    @Override
     public Page<Product> searchProducts(String tenantId, Pageable pageable) {
         return products.findAllByTenantId(tenantId, pageable);
     }

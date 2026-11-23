@@ -8,6 +8,7 @@ import com.rafaga.backend.identity.application.exception.InvalidCredentialsExcep
 import com.rafaga.backend.identity.application.exception.PasswordPolicyViolationException;
 import com.rafaga.backend.identity.application.exception.UnauthenticatedUserException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
+import com.rafaga.backend.tenant.application.TenantLimitExceededException;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +62,12 @@ class IdentityExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     Map<String, String> userAlreadyExists(UserAlreadyExistsException exception) {
         return Map.of("message", exception.getMessage());
+    }
+
+    @ExceptionHandler(TenantLimitExceededException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    Map<String, String> planLimitExceeded(TenantLimitExceededException exception) {
+        return Map.of("code", "PLAN_LIMIT_EXCEEDED", "message", exception.getMessage());
     }
 
     @ExceptionHandler(IdentityProviderUnavailableException.class)

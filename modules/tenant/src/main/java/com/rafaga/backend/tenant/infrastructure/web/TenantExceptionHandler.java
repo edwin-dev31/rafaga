@@ -1,5 +1,6 @@
 package com.rafaga.backend.tenant.infrastructure.web;
 
+import com.rafaga.backend.tenant.application.TenantLimitExceededException;
 import com.rafaga.backend.tenant.application.exception.TenantNotFoundException;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(assignableTypes = {
         TenantAdminController.class,
+        TenantLimitsAdminController.class,
         TenantRoutingAdminController.class,
         R2CorsAdminController.class,
         DeploymentTargetAdminController.class,
@@ -19,6 +21,12 @@ class TenantExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     Map<String, String> tenantNotFound(TenantNotFoundException exception) {
         return Map.of("message", exception.getMessage());
+    }
+
+    @ExceptionHandler(TenantLimitExceededException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    Map<String, String> limitExceeded(TenantLimitExceededException exception) {
+        return Map.of("code", "PLAN_LIMIT_EXCEEDED", "message", exception.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

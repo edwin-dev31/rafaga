@@ -27,4 +27,9 @@ class JpaIdentityStore implements IdentityStore {
     public User saveUser(User user) {
         return userRepository.save(user);
     }
+
+    @Override
+    public long countUsers(String tenantId) {
+        return userRepository.countByTenantId(tenantId);
+    }
 }

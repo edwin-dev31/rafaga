@@ -1,5 +1,8 @@
 package com.rafaga.backend.tenant.application.service;
 
+import com.rafaga.backend.tenant.application.PlanLimitsDefaults;
+import com.rafaga.backend.tenant.application.TenantLimitExceededException;
+import com.rafaga.backend.tenant.application.TenantLimits;
 import com.rafaga.backend.tenant.application.command.TenantRegistration;
 import com.rafaga.backend.tenant.application.command.TenantUpdate;
 import com.rafaga.backend.tenant.application.exception.TenantNotFoundException;
@@ -11,10 +14,13 @@ import com.rafaga.backend.tenant.domain.event.TenantUpdatedEvent;
 import com.rafaga.backend.tenant.domain.model.DatabaseConfig;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.domain.model.TenantStatus;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,19 +30,42 @@ public class TenantService {
     private final TenantRegistry tenantRegistry;
     private final PlanFeatureDefaults planFeatureDefaults;
     private final ApplicationEventPublisher eventPublisher;
+    private final TenantLimitsService limitsService;
 
     public TenantService(
             TenantRegistry tenantRegistry,
             PlanFeatureDefaults planFeatureDefaults,
             ApplicationEventPublisher eventPublisher) {
+        this(tenantRegistry, planFeatureDefaults, eventPublisher, (TenantLimitsService) null);
+    }
+
+    @Autowired
+    public TenantService(
+            TenantRegistry tenantRegistry,
+            PlanFeatureDefaults planFeatureDefaults,
+            ApplicationEventPublisher eventPublisher,
+            ObjectProvider<TenantLimitsService> limitsServiceProvider) {
+        this(tenantRegistry, planFeatureDefaults, eventPublisher, limitsServiceProvider.getIfAvailable());
+    }
+
+    TenantService(
+            TenantRegistry tenantRegistry,
+            PlanFeatureDefaults planFeatureDefaults,
+            ApplicationEventPublisher eventPublisher,
+            TenantLimitsService limitsService) {
         this.tenantRegistry = tenantRegistry;
         this.planFeatureDefaults = planFeatureDefaults;
         this.eventPublisher = eventPublisher;
+        this.limitsService = limitsService;
     }
 
     @Transactional
     public TenantConfig registerTenant(TenantRegistration registration) {
         String tenantId = UUID.randomUUID().toString();
+        TenantLimits planLimits = PlanLimitsDefaults.forPlan(tenantId, registration.planId(), Instant.now());
+        if (registration.domains().size() > planLimits.maxDomains()) {
+            throw new TenantLimitExceededException("domains", planLimits.maxDomains(), registration.domains().size());
+        }
         TenantConfig config = new TenantConfig(
                 tenantId,
                 registration.name(),
@@ -47,6 +76,9 @@ public class TenantService {
                 TenantStatus.ACTIVE,
                 planFeatureDefaults.featuresFor(registration.planId()));
         tenantRegistry.register(config);
+        if (limitsService != null) {
+            limitsService.syncWithPlan(config.tenantId(), config.planId());
+        }
         eventPublisher.publishEvent(new TenantCreatedEvent(config.tenantId(), config.name(), config.deploymentMode()));
         return config;
     }
@@ -54,6 +86,7 @@ public class TenantService {
     @Transactional
     public TenantConfig updateTenant(String tenantId, TenantUpdate update) {
         TenantConfig current = getTenantById(tenantId);
+        boolean planChanged = !current.planId().equals(update.planId());
         TenantConfig updated = new TenantConfig(
                 current.tenantId(),
                 update.name(),
@@ -64,6 +97,9 @@ public class TenantService {
                 current.status(),
                 current.featureFlags());
         tenantRegistry.update(updated);
+        if (planChanged && limitsService != null) {
+            limitsService.syncWithPlan(tenantId, update.planId());
+        }
         eventPublisher.publishEvent(new TenantUpdatedEvent(tenantId, changedFields(current, updated)));
         return updated;
     }

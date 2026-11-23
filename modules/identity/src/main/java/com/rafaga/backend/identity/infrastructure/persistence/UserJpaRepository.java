@@ -9,4 +9,6 @@ interface UserJpaRepository extends JpaRepository<User, UUID> {
     Optional<User> findByIdAndTenantId(UUID userId, String tenantId);
 
     Optional<User> findByKeycloakIdAndTenantId(String keycloakId, String tenantId);
+
+    long countByTenantId(String tenantId);
 }

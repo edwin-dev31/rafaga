@@ -12,12 +12,15 @@ import com.rafaga.backend.catalog.domain.model.Category;
 import com.rafaga.backend.catalog.domain.model.Product;
 import com.rafaga.backend.catalog.domain.model.ProductVariant;
 import com.rafaga.backend.common.application.tenant.TenantContext;
+import com.rafaga.backend.tenant.application.TenantLimitExceededException;
+import com.rafaga.backend.tenant.application.TenantLimitsQuery;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,16 +34,29 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProductService implements CatalogProductAccess {
     private final CatalogStore store;
     private final ApplicationEventPublisher events;
+    private final TenantLimitsQuery limitsQuery;
     private final Clock clock;
 
-    @Autowired
     public ProductService(CatalogStore store, ApplicationEventPublisher events) {
-        this(store, events, Clock.systemUTC());
+        this(store, events, null, Clock.systemUTC());
     }
 
     ProductService(CatalogStore store, ApplicationEventPublisher events, Clock clock) {
+        this(store, events, null, clock);
+    }
+
+    @Autowired
+    public ProductService(
+            CatalogStore store,
+            ApplicationEventPublisher events,
+            ObjectProvider<TenantLimitsQuery> limitsQueryProvider) {
+        this(store, events, limitsQueryProvider.getIfAvailable(), Clock.systemUTC());
+    }
+
+    ProductService(CatalogStore store, ApplicationEventPublisher events, TenantLimitsQuery limitsQuery, Clock clock) {
         this.store = store;
         this.events = events;
+        this.limitsQuery = limitsQuery;
         this.clock = clock;
     }
 
@@ -49,6 +65,14 @@ public class ProductService implements CatalogProductAccess {
         String tenantId = TenantContext.getCurrentTenantId();
         if (store.findProductBySku(command.sku(), tenantId).isPresent()) {
             throw new CatalogConflictException("Product SKU already exists for tenant");
+        }
+        if (limitsQuery != null) {
+            limitsQuery.findLimits(tenantId).ifPresent(limits -> {
+                long currentProducts = store.countProducts(tenantId);
+                if (currentProducts >= limits.maxProducts()) {
+                    throw new TenantLimitExceededException("products", limits.maxProducts(), currentProducts);
+                }
+            });
         }
         Product product = new Product(tenantId, command.sku(), command.name(),
                 command.description(), command.basePrice(), clock.instant());

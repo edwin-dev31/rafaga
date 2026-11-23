@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.application.service.TenantLimitsService;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.domain.model.TenantStatus;
@@ -54,6 +55,9 @@ class AuthenticationEndpointsIntegrationTest {
     @Autowired
     private TenantRegistry tenantRegistry;
 
+    @Autowired
+    private TenantLimitsService tenantLimitsService;
+
     @BeforeAll
     static void waitForKeycloak() throws InterruptedException {
         HttpClient client = HttpClient.newHttpClient();
@@ -75,9 +79,10 @@ class AuthenticationEndpointsIntegrationTest {
                 List.of(TENANT_DOMAIN),
                 DeploymentMode.SHARED_DB,
                 null,
-                "starter",
+                "pro",
                 TenantStatus.ACTIVE,
                 Map.of("catalog", true)));
+        tenantLimitsService.syncWithPlan(TENANT_ID, "pro");
         tenantRegistry.register(new TenantConfig(
                 SECOND_TENANT_ID,
                 "Second Store",
