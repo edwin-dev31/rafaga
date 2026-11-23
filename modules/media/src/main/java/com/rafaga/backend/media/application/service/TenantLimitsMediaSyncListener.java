@@ -5,8 +5,9 @@ import com.rafaga.backend.media.application.port.out.MediaRepository;
 import com.rafaga.backend.tenant.domain.event.TenantLimitsUpdatedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 /** Keeps tenant_media_quotas aligned with tenant plan limits when planId or overrides change. */
 @Component
@@ -18,7 +19,7 @@ public class TenantLimitsMediaSyncListener {
         this.mediaRepository = mediaRepository;
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onTenantLimitsUpdated(TenantLimitsUpdatedEvent event) {
         String previousTenantId = TenantContext.isSet() ? TenantContext.getCurrentTenantId() : null;
         TenantContext.setCurrentTenantId(event.tenantId());
