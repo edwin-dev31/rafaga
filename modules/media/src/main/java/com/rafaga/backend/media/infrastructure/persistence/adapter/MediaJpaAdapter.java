@@ -8,6 +8,8 @@ import com.rafaga.backend.media.infrastructure.persistence.entity.TenantMediaQuo
 import com.rafaga.backend.media.infrastructure.persistence.repository.MediaAssetRepository;
 import com.rafaga.backend.media.infrastructure.persistence.repository.ProductImageRepository;
 import com.rafaga.backend.media.infrastructure.persistence.repository.TenantMediaQuotaRepository;
+import com.rafaga.backend.tenant.application.TenantLimitsQuery;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -29,6 +31,7 @@ public class MediaJpaAdapter implements MediaRepository {
     private final MediaAssetRepository assetRepo;
     private final ProductImageRepository productImageRepo;
     private final TenantMediaQuotaRepository quotaRepo;
+    private final TenantLimitsQuery limitsQuery;
     private final Clock clock;
 
     @Value("${media.quota.default-max-assets:500}")
@@ -37,20 +40,36 @@ public class MediaJpaAdapter implements MediaRepository {
     @Value("${media.quota.default-max-storage-bytes:5368709120}")
     private long defaultMaxStorageBytes;
 
-    @Autowired
     public MediaJpaAdapter(MediaAssetRepository assetRepo,
                            ProductImageRepository productImageRepo,
                            TenantMediaQuotaRepository quotaRepo) {
-        this(assetRepo, productImageRepo, quotaRepo, Clock.systemUTC());
+        this(assetRepo, productImageRepo, quotaRepo, null, Clock.systemUTC());
+    }
+
+    @Autowired
+    public MediaJpaAdapter(MediaAssetRepository assetRepo,
+                           ProductImageRepository productImageRepo,
+                           TenantMediaQuotaRepository quotaRepo,
+                           ObjectProvider<TenantLimitsQuery> limitsQueryProvider) {
+        this(assetRepo, productImageRepo, quotaRepo, limitsQueryProvider.getIfAvailable(), Clock.systemUTC());
     }
 
     MediaJpaAdapter(MediaAssetRepository assetRepo,
                     ProductImageRepository productImageRepo,
                     TenantMediaQuotaRepository quotaRepo,
                     Clock clock) {
+        this(assetRepo, productImageRepo, quotaRepo, null, clock);
+    }
+
+    MediaJpaAdapter(MediaAssetRepository assetRepo,
+                    ProductImageRepository productImageRepo,
+                    TenantMediaQuotaRepository quotaRepo,
+                    TenantLimitsQuery limitsQuery,
+                    Clock clock) {
         this.assetRepo = assetRepo;
         this.productImageRepo = productImageRepo;
         this.quotaRepo = quotaRepo;
+        this.limitsQuery = limitsQuery;
         this.clock = clock;
     }
 
@@ -300,8 +319,9 @@ public class MediaJpaAdapter implements MediaRepository {
         }
         entity = new TenantMediaQuotaEntity();
         entity.setTenantId(tenantId);
-        entity.setMaxAssets(defaultMaxAssets);
-        entity.setMaxStorageBytes(defaultMaxStorageBytes);
+        var configuredLimits = limitsQuery != null ? limitsQuery.findLimits(tenantId) : Optional.<com.rafaga.backend.tenant.application.TenantLimits>empty();
+        entity.setMaxAssets(configuredLimits.map(com.rafaga.backend.tenant.application.TenantLimits::maxAssets).orElse(defaultMaxAssets));
+        entity.setMaxStorageBytes(configuredLimits.map(com.rafaga.backend.tenant.application.TenantLimits::maxStorageBytes).orElse(defaultMaxStorageBytes));
         entity.setUsedAssets(0);
         entity.setUsedStorageBytes(0);
         entity.setReservedAssets(0);

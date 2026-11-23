@@ -10,4 +10,8 @@ public interface IdentityStore {
     Optional<User> findUserByKeycloakId(String tenantId, String keycloakId);
 
     User saveUser(User user);
+
+    default long countUsers(String tenantId) {
+        return 0L;
+    }
 }

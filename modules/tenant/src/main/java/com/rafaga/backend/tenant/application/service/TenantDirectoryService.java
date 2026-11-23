@@ -1,5 +1,8 @@
 package com.rafaga.backend.tenant.application.service;
 
+import com.rafaga.backend.tenant.application.TenantLimitExceededException;
+import com.rafaga.backend.tenant.application.TenantLimits;
+import com.rafaga.backend.tenant.application.TenantLimitsQuery;
 import com.rafaga.backend.tenant.application.exception.TenantNotFoundException;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.event.TenantDirectoryChangedEvent;
@@ -30,6 +33,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +50,7 @@ public class TenantDirectoryService {
     private final TenantDomainOperationRepository operations;
     private final TenantRegistry tenantRegistry;
     private final ApplicationEventPublisher events;
+    private final TenantLimitsQuery limitsQuery;
     private final Clock clock;
 
     public TenantDirectoryService(
@@ -54,12 +60,36 @@ public class TenantDirectoryService {
             TenantDomainOperationRepository operations,
             TenantRegistry tenantRegistry,
             ApplicationEventPublisher events) {
+        this(domains, state, targets, operations, tenantRegistry, events, (TenantLimitsQuery) null);
+    }
+
+    @Autowired
+    public TenantDirectoryService(
+            TenantDomainControlRepository domains,
+            TenantDirectoryStateRepository state,
+            DeploymentTargetRepository targets,
+            TenantDomainOperationRepository operations,
+            TenantRegistry tenantRegistry,
+            ApplicationEventPublisher events,
+            ObjectProvider<TenantLimitsQuery> limitsQueryProvider) {
+        this(domains, state, targets, operations, tenantRegistry, events, limitsQueryProvider.getIfAvailable());
+    }
+
+    TenantDirectoryService(
+            TenantDomainControlRepository domains,
+            TenantDirectoryStateRepository state,
+            DeploymentTargetRepository targets,
+            TenantDomainOperationRepository operations,
+            TenantRegistry tenantRegistry,
+            ApplicationEventPublisher events,
+            TenantLimitsQuery limitsQuery) {
         this.domains = domains;
         this.state = state;
         this.targets = targets;
         this.operations = operations;
         this.tenantRegistry = tenantRegistry;
         this.events = events;
+        this.limitsQuery = limitsQuery;
         this.clock = Clock.systemUTC();
     }
 
@@ -130,6 +160,13 @@ public class TenantDirectoryService {
                 throw new IllegalStateException("Domain already registered for tenant: " + domain);
             }
             throw new IllegalStateException("Domain is already owned by another tenant");
+        }
+        if (limitsQuery != null) {
+            TenantLimits limits = limitsQuery.getLimits(tenantId);
+            long currentDomains = domains.countByTenantId(tenantId);
+            if (currentDomains >= limits.maxDomains()) {
+                throw new TenantLimitExceededException("domains", limits.maxDomains(), currentDomains);
+            }
         }
         Instant now = Instant.now(clock);
         long version = advanceVersion(now);

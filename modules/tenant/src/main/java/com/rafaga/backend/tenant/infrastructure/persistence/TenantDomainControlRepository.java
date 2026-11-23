@@ -10,6 +10,7 @@ public interface TenantDomainControlRepository extends JpaRepository<TenantDomai
     Optional<TenantDomainControl> findByTenantIdAndDomain(String tenantId, String domain);
     Optional<TenantDomainControl> findByDomain(String domain);
     List<TenantDomainControl> findByTenantIdOrderByDomain(String tenantId);
+    long countByTenantId(String tenantId);
     List<TenantDomainControl> findByStatus(DomainStatus status);
     List<TenantDomainControl> findByStatusInOrderByRequestedAtAsc(Collection<DomainStatus> statuses);
     List<TenantDomainControl> findByDirectoryVersionGreaterThanOrderByDirectoryVersion(long version);

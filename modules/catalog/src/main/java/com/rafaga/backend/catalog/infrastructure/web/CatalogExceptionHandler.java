@@ -3,6 +3,7 @@ package com.rafaga.backend.catalog.infrastructure.web;
 import com.rafaga.backend.catalog.application.exception.CatalogConflictException;
 import com.rafaga.backend.catalog.application.exception.CatalogNotFoundException;
 import com.rafaga.backend.catalog.infrastructure.web.storefront.StorefrontCatalogController;
+import com.rafaga.backend.tenant.application.TenantLimitExceededException;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,12 @@ class CatalogExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     Map<String, String> conflict(RuntimeException exception) {
         return Map.of("message", "Catalog resource conflicts with existing data");
+    }
+
+    @ExceptionHandler(TenantLimitExceededException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    Map<String, String> planLimitExceeded(TenantLimitExceededException exception) {
+        return Map.of("code", "PLAN_LIMIT_EXCEEDED", "message", exception.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

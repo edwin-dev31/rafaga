@@ -13,6 +13,9 @@ public interface CatalogStore {
     Product saveProduct(Product product);
     Optional<Product> findProduct(UUID id, String tenantId);
     Optional<Product> findProductBySku(String sku, String tenantId);
+    default long countProducts(String tenantId) {
+        return 0L;
+    }
     Page<Product> searchProducts(String tenantId, Pageable pageable);
     void deleteProduct(Product product);
     Category saveCategory(Category category);

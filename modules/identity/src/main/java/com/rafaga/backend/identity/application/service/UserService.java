@@ -1,6 +1,8 @@
 package com.rafaga.backend.identity.application.service;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
+import com.rafaga.backend.tenant.application.TenantLimitExceededException;
+import com.rafaga.backend.tenant.application.TenantLimitsQuery;
 import com.rafaga.backend.identity.application.exception.CrossTenantAccessException;
 import com.rafaga.backend.identity.application.exception.IdentityProviderUnavailableException;
 import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
@@ -18,6 +20,7 @@ import com.rafaga.backend.identity.application.security.RegistrationTokenValidat
 import com.rafaga.backend.identity.domain.model.User;
 import java.time.Clock;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -33,14 +36,24 @@ public class UserService {
     private final AuthenticationPort authenticationPort;
     private final IdentityStore identityStore;
     private final RegistrationTokenValidator registrationTokenValidator;
+    private final TenantLimitsQuery limitsQuery;
     private final Clock clock;
+
+    public UserService(
+            AuthenticationPort authenticationPort,
+            IdentityStore identityStore,
+            RegistrationTokenValidator registrationTokenValidator) {
+        this(authenticationPort, identityStore, registrationTokenValidator, null, Clock.systemUTC());
+    }
 
     @Autowired
     public UserService(
             AuthenticationPort authenticationPort,
             IdentityStore identityStore,
-            RegistrationTokenValidator registrationTokenValidator) {
-        this(authenticationPort, identityStore, registrationTokenValidator, Clock.systemUTC());
+            RegistrationTokenValidator registrationTokenValidator,
+            ObjectProvider<TenantLimitsQuery> limitsQueryProvider) {
+        this(authenticationPort, identityStore, registrationTokenValidator,
+                limitsQueryProvider.getIfAvailable(), Clock.systemUTC());
     }
 
     UserService(
@@ -48,9 +61,19 @@ public class UserService {
             IdentityStore identityStore,
             RegistrationTokenValidator registrationTokenValidator,
             Clock clock) {
+        this(authenticationPort, identityStore, registrationTokenValidator, null, clock);
+    }
+
+    UserService(
+            AuthenticationPort authenticationPort,
+            IdentityStore identityStore,
+            RegistrationTokenValidator registrationTokenValidator,
+            TenantLimitsQuery limitsQuery,
+            Clock clock) {
         this.authenticationPort = authenticationPort;
         this.identityStore = identityStore;
         this.registrationTokenValidator = registrationTokenValidator;
+        this.limitsQuery = limitsQuery;
         this.clock = clock;
     }
 
@@ -79,6 +102,14 @@ public class UserService {
         String tenantId = currentTenantId();
         try {
             registrationTokenValidator.validate(registrationToken);
+            if (limitsQuery != null) {
+                limitsQuery.findLimits(tenantId).ifPresent(limits -> {
+                    long currentUsers = identityStore.countUsers(tenantId);
+                    if (currentUsers >= limits.maxAdminUsers()) {
+                        throw new TenantLimitExceededException("adminUsers", limits.maxAdminUsers(), currentUsers);
+                    }
+                });
+            }
             UserProfile user = synchronizeProfile(authenticationPort.registerUser(tenantId, registration));
             log.info("event=auth.register outcome=SUCCESS tenantId={}", tenantId);
             return user;

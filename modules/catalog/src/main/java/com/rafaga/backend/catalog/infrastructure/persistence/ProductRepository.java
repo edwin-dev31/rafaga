@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 interface ProductRepository extends JpaRepository<Product, UUID> {
     Optional<Product> findByIdAndTenantId(UUID id, String tenantId);
     Optional<Product> findBySkuAndTenantId(String sku, String tenantId);
+    long countByTenantId(String tenantId);
     Page<Product> findAllByTenantId(String tenantId, Pageable pageable);
     Page<Product> findAllByTenantIdAndStatus(String tenantId, ProductStatus status, Pageable pageable);
     Optional<Product> findByIdAndTenantIdAndStatus(UUID id, String tenantId, ProductStatus status);
