@@ -2,6 +2,7 @@ package com.rafaga.backend.orders.infrastructure.web;
 
 import com.rafaga.backend.orders.application.command.CreateOrder;
 import com.rafaga.backend.orders.application.port.OrderSearchFilter;
+import com.rafaga.backend.orders.application.service.OrderReportView;
 import com.rafaga.backend.orders.application.service.OrderService;
 import com.rafaga.backend.orders.application.service.OrderView;
 import com.rafaga.backend.orders.domain.model.OrderStatus;
@@ -41,6 +42,14 @@ public class OrderController {
         return orders.createOrder(new CreateOrder(request.customerId(), request.lines().stream()
                 .map(line -> new CreateOrder.Line(line.productId(), line.variantId(), line.quantity()))
                 .toList()));
+    }
+
+    @GetMapping("/report")
+    @RequiresFeature("reports")
+    public OrderReportView report(
+            @RequestParam(name = "from", required = false) Instant from,
+            @RequestParam(name = "to", required = false) Instant to) {
+        return orders.getOrderReport(from, to);
     }
 
     @GetMapping("/{orderId}")

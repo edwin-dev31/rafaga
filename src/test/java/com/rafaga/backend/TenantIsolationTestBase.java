@@ -2,6 +2,7 @@ package com.rafaga.backend;
 
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.application.service.TenantLimitsService;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.domain.model.TenantStatus;
@@ -27,10 +28,15 @@ abstract class TenantIsolationTestBase {
     @Autowired
     protected TenantRegistry tenants;
 
+    @Autowired
+    protected TenantLimitsService tenantLimitsService;
+
     @BeforeEach
     void registerIsolationTenants() {
         tenants.register(isolationTenant(TENANT_A, HOST_A));
         tenants.register(isolationTenant(TENANT_B, HOST_B));
+        tenantLimitsService.updateLimits(TENANT_A, "pro", null, null, null, 1000, null);
+        tenantLimitsService.updateLimits(TENANT_B, "pro", null, null, null, 1000, null);
     }
 
     @AfterEach

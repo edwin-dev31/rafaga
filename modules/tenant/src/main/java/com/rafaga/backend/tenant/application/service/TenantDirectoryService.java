@@ -410,6 +410,10 @@ public class TenantDirectoryService {
                 domain.getActivatedAt(),
                 domain.getSuspendedAt(),
                 domain.getOperationState(),
-                domain.getOperationUpdatedAt());
+                domain.getOperationUpdatedAt(),
+                domain.getOwnershipVerificationName(),
+                domain.getOwnershipVerificationValue(),
+                domain.getLastFailureCode(),
+                TenantDomainView.nextActionFor(domain.getStatus()));
     }
 }

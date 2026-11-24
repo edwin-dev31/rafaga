@@ -91,6 +91,11 @@ public class Order {
     }
 
     public void addLine(UUID productId, UUID variantId, int quantity, BigDecimal unitPrice) {
+        addLine(productId, variantId, quantity, unitPrice, null, null, null);
+    }
+
+    public void addLine(UUID productId, UUID variantId, int quantity, BigDecimal unitPrice,
+            String productName, String sku, String variantName) {
         if (status != OrderStatus.PENDING) {
             throw new InvalidOrderTransitionException("Only pending orders can add lines");
         }
@@ -98,7 +103,8 @@ public class Order {
                 && Objects.equals(line.getVariantId(), variantId))) {
             throw new IllegalArgumentException("Duplicate product and variant in order");
         }
-        OrderLine line = new OrderLine(this, productId, variantId, quantity, unitPrice);
+        OrderLine line = new OrderLine(this, productId, variantId, quantity, unitPrice,
+                productName, sku, variantName);
         lines.add(line);
         subtotal = subtotal.add(line.getLineTotal());
         total = subtotal;

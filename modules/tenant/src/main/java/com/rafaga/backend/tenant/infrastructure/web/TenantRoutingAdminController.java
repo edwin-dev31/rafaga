@@ -133,7 +133,11 @@ public class TenantRoutingAdminController {
             Instant activatedAt,
             Instant suspendedAt,
             String operationState,
-            Instant operationUpdatedAt) {
+            Instant operationUpdatedAt,
+            String ownershipVerificationName,
+            String ownershipVerificationValue,
+            String failureReason,
+            String nextAction) {
         static DomainResponse from(TenantDomainView view) {
             return new DomainResponse(
                     view.tenantId(),
@@ -148,7 +152,11 @@ public class TenantRoutingAdminController {
                     view.activatedAt(),
                     view.suspendedAt(),
                     view.operationState().name(),
-                    view.operationUpdatedAt());
+                    view.operationUpdatedAt(),
+                    view.ownershipVerificationName(),
+                    view.ownershipVerificationValue(),
+                    view.failureReason(),
+                    view.nextAction());
         }
     }
 }

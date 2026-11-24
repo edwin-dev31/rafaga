@@ -28,10 +28,16 @@ public record OrderView(UUID id, UUID customerId, UUID cartId, String publicToke
                 order.getConfirmedAt(), order.getCompletedAt());
     }
 
-    public record LineView(UUID id, UUID productId, UUID variantId, int quantity,
-            BigDecimal unitPrice, BigDecimal lineTotal) {
+    public record LineView(UUID id, UUID productId, UUID variantId, String productName,
+            String sku, String variantName, int quantity, BigDecimal unitPrice, BigDecimal lineTotal) {
+        public LineView(UUID id, UUID productId, UUID variantId, int quantity,
+                BigDecimal unitPrice, BigDecimal lineTotal) {
+            this(id, productId, variantId, null, null, null, quantity, unitPrice, lineTotal);
+        }
+
         static LineView from(OrderLine line) {
             return new LineView(line.getId(), line.getProductId(), line.getVariantId(),
+                    line.getProductName(), line.getSku(), line.getVariantName(),
                     line.getQuantity(), line.getUnitPrice(), line.getLineTotal());
         }
     }

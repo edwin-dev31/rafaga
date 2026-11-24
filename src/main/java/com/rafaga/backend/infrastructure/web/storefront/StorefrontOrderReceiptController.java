@@ -75,27 +75,29 @@ public class StorefrontOrderReceiptController {
     }
 
     private ReceiptLineView toReceiptLine(OrderView.LineView line) {
-        String productName = null;
-        String sku = null;
-        String variantName = null;
-        try {
-            ProductView product = products.getProductById(line.productId());
-            productName = product.name();
-            sku = product.sku();
-            if (line.variantId() != null) {
-                ProductView.VariantView variant = product.variants().stream()
-                        .filter(candidate -> line.variantId().equals(candidate.id()))
-                        .findFirst()
-                        .orElse(null);
-                if (variant != null) {
-                    variantName = variant.name();
-                    if (variant.sku() != null && !variant.sku().isBlank()) {
-                        sku = variant.sku();
+        String productName = line.productName();
+        String sku = line.sku();
+        String variantName = line.variantName();
+        if (productName == null) {
+            try {
+                ProductView product = products.getProductById(line.productId());
+                productName = product.name();
+                sku = product.sku();
+                if (line.variantId() != null) {
+                    ProductView.VariantView variant = product.variants().stream()
+                            .filter(candidate -> line.variantId().equals(candidate.id()))
+                            .findFirst()
+                            .orElse(null);
+                    if (variant != null) {
+                        variantName = variant.name();
+                        if (variant.sku() != null && !variant.sku().isBlank()) {
+                            sku = variant.sku();
+                        }
                     }
                 }
+            } catch (CatalogNotFoundException ignored) {
+                // Legacy pre-snapshot order whose product was later removed; keep line pricing intact.
             }
-        } catch (CatalogNotFoundException ignored) {
-            // Product may have been removed after the order was placed; keep line pricing intact.
         }
         return new ReceiptLineView(
                 line.productId(),

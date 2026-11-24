@@ -31,6 +31,8 @@ public class TenantDomainControl {
     @Column(name = "retry_count") private int retryCount;
     @Column(name = "next_retry_at") private Instant nextRetryAt;
     @Column(name = "last_failure_code") private String lastFailureCode;
+    @Column(name = "ownership_verification_name") private String ownershipVerificationName;
+    @Column(name = "ownership_verification_value") private String ownershipVerificationValue;
 
     protected TenantDomainControl() { }
     public TenantDomainControl(String tenantId, String domain, DomainStatus status, String frontendOrigin, String targetId, Instant now) {
@@ -86,6 +88,16 @@ public class TenantDomainControl {
         this.operationUpdatedAt = now;
     }
 
+    public void recordOwnershipVerification(String name, String value, Instant now) {
+        if (name != null && !name.isBlank()) {
+            this.ownershipVerificationName = name;
+        }
+        if (value != null && !value.isBlank()) {
+            this.ownershipVerificationValue = value;
+        }
+        this.operationUpdatedAt = now;
+    }
+
     public void scheduleRetry(String failureCode, Instant retryAt, Instant now) {
         this.retryCount++;
         this.nextRetryAt = retryAt;
@@ -123,4 +135,6 @@ public class TenantDomainControl {
     public int getRetryCount() { return retryCount; }
     public Instant getNextRetryAt() { return nextRetryAt; }
     public String getLastFailureCode() { return lastFailureCode; }
+    public String getOwnershipVerificationName() { return ownershipVerificationName; }
+    public String getOwnershipVerificationValue() { return ownershipVerificationValue; }
 }
