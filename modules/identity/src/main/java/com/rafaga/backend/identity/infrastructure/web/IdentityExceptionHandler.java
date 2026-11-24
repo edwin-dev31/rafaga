@@ -21,7 +21,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice(assignableTypes = {
         AuthenticationController.class,
         UserController.class,
-        TenantUserAdminController.class
+        TenantUserAdminController.class,
+        CustomerController.class
 })
 class IdentityExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(IdentityExceptionHandler.class);

@@ -5,6 +5,7 @@ import com.rafaga.backend.cart.application.exception.CartNotFoundException;
 import com.rafaga.backend.cart.application.port.CartOrderLookup;
 import com.rafaga.backend.cart.application.port.CartStore;
 import com.rafaga.backend.cart.application.port.CartCustomerAccess;
+import com.rafaga.backend.cart.application.port.GuestCheckoutCustomerResolver;
 import com.rafaga.backend.cart.application.service.storefront.GuestSessionService;
 import com.rafaga.backend.cart.domain.event.CartCheckedOutEvent;
 import com.rafaga.backend.cart.domain.model.Cart;
@@ -32,23 +33,27 @@ public class CartService {
     private final Clock clock;
     private final GuestSessionService guestSessions;
     private final CartOrderLookup orderLookup;
+    private final GuestCheckoutCustomerResolver guestCustomerResolver;
 
     @Autowired
     public CartService(CartStore store, CartCustomerAccess customerAccess,
             ProductService products, ApplicationEventPublisher events,
-            GuestSessionService guestSessions, ObjectProvider<CartOrderLookup> orderLookup) {
+            GuestSessionService guestSessions, ObjectProvider<CartOrderLookup> orderLookup,
+            ObjectProvider<GuestCheckoutCustomerResolver> guestCustomerResolver) {
         this(store, customerAccess, products, events, Clock.systemUTC(), guestSessions,
-                orderLookup.getIfAvailable(() -> cartId -> Optional.empty()));
+                orderLookup.getIfAvailable(() -> cartId -> Optional.empty()),
+                guestCustomerResolver.getIfAvailable(() -> (name, email, phone) -> Optional.empty()));
     }
 
     CartService(CartStore store, CartCustomerAccess customerAccess, ProductService products,
             ApplicationEventPublisher events, Clock clock, GuestSessionService guestSessions) {
-        this(store, customerAccess, products, events, clock, guestSessions, cartId -> Optional.empty());
+        this(store, customerAccess, products, events, clock, guestSessions,
+                cartId -> Optional.empty(), (name, email, phone) -> Optional.empty());
     }
 
     CartService(CartStore store, CartCustomerAccess customerAccess, ProductService products,
             ApplicationEventPublisher events, Clock clock, GuestSessionService guestSessions,
-            CartOrderLookup orderLookup) {
+            CartOrderLookup orderLookup, GuestCheckoutCustomerResolver guestCustomerResolver) {
         this.store = store;
         this.customerAccess = customerAccess;
         this.products = products;
@@ -56,6 +61,7 @@ public class CartService {
         this.clock = clock;
         this.guestSessions = guestSessions;
         this.orderLookup = orderLookup;
+        this.guestCustomerResolver = guestCustomerResolver;
     }
 
     /** Returns the active cart for the customer, creating one if it does not exist. */
@@ -177,17 +183,30 @@ public class CartService {
         return CartView.from(store.save(cart));
     }
 
-    /** Checks out the guest's active cart. */
+    /** Checks out the guest's active cart without customer contact details. */
     @Transactional
     public CartView guestCheckout(String guestSessionId) {
+        return guestCheckout(guestSessionId, null, null, null);
+    }
+
+    /**
+     * Checks out the guest's active cart, optionally capturing pre-WhatsApp customer details.
+     * If no name is provided, proceeds as an anonymous guest order without error.
+     */
+    @Transactional
+    public CartView guestCheckout(String guestSessionId, String customerName,
+            String customerEmail, String customerPhone) {
         String tenantId = TenantContext.getCurrentTenantId();
         String sessionHash = requireGuestSession(guestSessionId);
         Cart cart = store.findActiveByGuestSession(tenantId, sessionHash)
                 .orElseThrow(() -> new CartNotFoundException(sessionHash));
+        UUID resolvedCustomerId = guestCustomerResolver
+                .resolveOrCreateCustomer(customerName, customerEmail, customerPhone)
+                .orElse(null);
         cart.checkout(clock.instant());
         Cart saved = store.save(cart);
         events.publishEvent(new CartCheckedOutEvent(
-                saved.getId(), tenantId, null,
+                saved.getId(), tenantId, resolvedCustomerId,
                 saved.getItems().stream()
                         .map(item -> new CartCheckedOutEvent.Line(
                                 item.getProductId(), item.getVariantId(),

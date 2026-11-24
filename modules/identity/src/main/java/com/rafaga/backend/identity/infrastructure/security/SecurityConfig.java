@@ -81,7 +81,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/users/me", "/api/users/me/**").hasAnyRole("SUPER_ADMIN", "STORE_MANAGER")
                         .requestMatchers("/api/users/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/products/**", "/api/categories/**", "/api/stock/**",
-                                "/api/orders/**", "/api/carts/**")
+                                "/api/orders/**", "/api/carts/**", "/api/customers/**")
                                 .hasAnyRole("SUPER_ADMIN", "STORE_MANAGER")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
