@@ -8,12 +8,22 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-public record OrderView(UUID id, UUID customerId, OrderStatus status, BigDecimal subtotal,
-        BigDecimal total, List<LineView> lines, Instant createdAt, Instant updatedAt,
-        Instant confirmedAt, Instant completedAt) {
+public record OrderView(UUID id, UUID customerId, UUID cartId, String publicToken, OrderStatus status,
+        BigDecimal subtotal, BigDecimal total, List<LineView> lines, Instant createdAt,
+        Instant updatedAt, Instant confirmedAt, Instant completedAt) {
+    public OrderView(UUID id, UUID customerId, OrderStatus status, BigDecimal subtotal,
+            BigDecimal total, List<LineView> lines, Instant createdAt, Instant updatedAt,
+            Instant confirmedAt, Instant completedAt) {
+        this(id, customerId, null, null, status, subtotal, total, lines, createdAt, updatedAt, confirmedAt, completedAt);
+    }
+
+    public String statusName() {
+        return status.name();
+    }
+
     public static OrderView from(Order order) {
-        return new OrderView(order.getId(), order.getCustomerId(), order.getStatus(),
-                order.getSubtotal(), order.getTotal(), order.getLines().stream()
+        return new OrderView(order.getId(), order.getCustomerId(), order.getCartId(), order.getPublicToken(),
+                order.getStatus(), order.getSubtotal(), order.getTotal(), order.getLines().stream()
                         .map(LineView::from).toList(), order.getCreatedAt(), order.getUpdatedAt(),
                 order.getConfirmedAt(), order.getCompletedAt());
     }

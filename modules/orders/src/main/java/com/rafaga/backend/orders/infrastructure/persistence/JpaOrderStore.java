@@ -26,6 +26,16 @@ class JpaOrderStore implements OrderStore {
         return orders.findByIdAndTenantId(orderId, tenantId);
     }
 
+    @Override
+    public Optional<Order> findByCartId(String tenantId, UUID cartId) {
+        return orders.findByTenantIdAndCartId(tenantId, cartId);
+    }
+
+    @Override
+    public Optional<Order> findByPublicToken(String tenantId, String publicToken) {
+        return orders.findByTenantIdAndPublicToken(tenantId, publicToken);
+    }
+
     public Page<Order> findAll(String tenantId, Pageable pageable) {
         return orders.findAllByTenantId(tenantId, pageable);
     }

@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -69,6 +70,50 @@ public class OrderService {
         Order saved = store.save(order);
         events.publishEvent(new OrderCreatedEvent(saved.getId(), tenantId, saved.getCustomerId()));
         return OrderView.from(saved);
+    }
+
+    /**
+     * Creates an order from a checked-out cart, idempotently by {@code (tenantId, cartId)}.
+     * Reserves stock for every line inside the caller's transaction so insufficient stock
+     * rolls back both the order and the cart checkout atomically.
+     */
+    @Transactional
+    public OrderView createOrderFromCart(UUID cartId, UUID customerId, List<CreateOrder.Line> lines) {
+        Objects.requireNonNull(cartId, "cartId must not be null");
+        if (lines == null || lines.isEmpty()) {
+            throw new IllegalArgumentException("Order must have at least one line");
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        Optional<Order> existing = store.findByCartId(tenantId, cartId);
+        if (existing.isPresent()) {
+            return OrderView.from(existing.get());
+        }
+        Order order = Order.fromCart(tenantId, cartId, customerId, clock.instant());
+        for (CreateOrder.Line line : lines) {
+            ProductView product = products.getProductById(line.productId());
+            order.addLine(line.productId(), line.variantId(), line.quantity(), unitPrice(product, line.variantId()));
+        }
+        for (OrderLine line : order.getLines()) {
+            stock.reserveStock(line.getProductId(), line.getVariantId(), line.getQuantity(),
+                    order.getId().toString(), null);
+        }
+        Order saved = store.save(order);
+        events.publishEvent(new OrderCreatedEvent(saved.getId(), tenantId, saved.getCustomerId()));
+        return OrderView.from(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<OrderView> findOrderByCartId(UUID cartId) {
+        return store.findByCartId(TenantContext.getCurrentTenantId(), cartId).map(OrderView::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<OrderView> findOrderByPublicToken(String publicToken) {
+        if (publicToken == null || publicToken.isBlank()) {
+            return Optional.empty();
+        }
+        return store.findByPublicToken(TenantContext.getCurrentTenantId(), publicToken.trim())
+                .map(OrderView::from);
     }
 
     @Transactional(readOnly = true)

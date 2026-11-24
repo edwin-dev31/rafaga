@@ -2,6 +2,7 @@ package com.rafaga.backend.cart.application.service;
 
 import com.rafaga.backend.cart.application.command.UpsertCartItem;
 import com.rafaga.backend.cart.application.exception.CartNotFoundException;
+import com.rafaga.backend.cart.application.port.CartOrderLookup;
 import com.rafaga.backend.cart.application.port.CartStore;
 import com.rafaga.backend.cart.application.port.CartCustomerAccess;
 import com.rafaga.backend.cart.application.service.storefront.GuestSessionService;
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -29,22 +31,31 @@ public class CartService {
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final GuestSessionService guestSessions;
+    private final CartOrderLookup orderLookup;
 
     @Autowired
     public CartService(CartStore store, CartCustomerAccess customerAccess,
             ProductService products, ApplicationEventPublisher events,
-            GuestSessionService guestSessions) {
-        this(store, customerAccess, products, events, Clock.systemUTC(), guestSessions);
+            GuestSessionService guestSessions, ObjectProvider<CartOrderLookup> orderLookup) {
+        this(store, customerAccess, products, events, Clock.systemUTC(), guestSessions,
+                orderLookup.getIfAvailable(() -> cartId -> Optional.empty()));
     }
 
     CartService(CartStore store, CartCustomerAccess customerAccess, ProductService products,
             ApplicationEventPublisher events, Clock clock, GuestSessionService guestSessions) {
+        this(store, customerAccess, products, events, clock, guestSessions, cartId -> Optional.empty());
+    }
+
+    CartService(CartStore store, CartCustomerAccess customerAccess, ProductService products,
+            ApplicationEventPublisher events, Clock clock, GuestSessionService guestSessions,
+            CartOrderLookup orderLookup) {
         this.store = store;
         this.customerAccess = customerAccess;
         this.products = products;
         this.events = events;
         this.clock = clock;
         this.guestSessions = guestSessions;
+        this.orderLookup = orderLookup;
     }
 
     /** Returns the active cart for the customer, creating one if it does not exist. */
@@ -100,6 +111,7 @@ public class CartService {
                                 item.getProductId(), item.getVariantId(),
                                 item.getQuantity(), item.getUnitPrice()))
                         .toList()));
+        saved = attachOrderReference(saved);
         return CartView.from(saved);
     }
 
@@ -181,6 +193,7 @@ public class CartService {
                                 item.getProductId(), item.getVariantId(),
                                 item.getQuantity(), item.getUnitPrice()))
                         .toList()));
+        saved = attachOrderReference(saved);
         return CartView.from(saved);
     }
 
@@ -224,6 +237,15 @@ public class CartService {
                 .findFirst()
                 .map(v -> product.basePrice().add(v.priceAdjustment()))
                 .orElseThrow(() -> new CatalogNotFoundException("Product variant", variantId));
+    }
+
+    private Cart attachOrderReference(Cart cart) {
+        Optional<CartOrderLookup.OrderReference> order = orderLookup.findOrderByCartId(cart.getId());
+        if (order.isEmpty()) {
+            return cart;
+        }
+        cart.linkOrder(order.get().orderId(), order.get().publicToken());
+        return store.save(cart);
     }
 
     private String requireGuestSession(String guestSessionId) {

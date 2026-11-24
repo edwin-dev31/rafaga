@@ -3,6 +3,7 @@ package com.rafaga.backend.cart.infrastructure.web;
 import com.rafaga.backend.cart.application.exception.CartConflictException;
 import com.rafaga.backend.cart.application.exception.CartNotFoundException;
 import com.rafaga.backend.cart.domain.exception.InvalidCartOperationException;
+import com.rafaga.backend.cart.infrastructure.web.storefront.StorefrontCartController;
 import com.rafaga.backend.catalog.application.exception.CatalogNotFoundException;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -11,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(assignableTypes = CartController.class)
+@RestControllerAdvice(assignableTypes = {CartController.class, StorefrontCartController.class})
 public class CartExceptionHandler {
 
     @ExceptionHandler({CartNotFoundException.class, CatalogNotFoundException.class})

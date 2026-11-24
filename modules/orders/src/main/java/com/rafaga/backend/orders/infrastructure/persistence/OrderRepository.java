@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecificationExecutor<Order> {
     Optional<Order> findByIdAndTenantId(UUID id, String tenantId);
+    Optional<Order> findByTenantIdAndCartId(String tenantId, UUID cartId);
+    Optional<Order> findByTenantIdAndPublicToken(String tenantId, String publicToken);
     Page<Order> findAllByTenantId(String tenantId, Pageable pageable);
     List<Order> findByTenantIdAndCustomerId(String tenantId, UUID customerId);
     List<Order> findByTenantIdAndStatus(String tenantId, OrderStatus status);

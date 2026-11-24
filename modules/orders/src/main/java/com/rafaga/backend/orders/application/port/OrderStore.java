@@ -11,6 +11,12 @@ import org.springframework.data.domain.Pageable;
 public interface OrderStore {
     Order save(Order order);
     Optional<Order> find(UUID orderId, String tenantId);
+    default Optional<Order> findByCartId(String tenantId, UUID cartId) {
+        return Optional.empty();
+    }
+    default Optional<Order> findByPublicToken(String tenantId, String publicToken) {
+        return Optional.empty();
+    }
     Page<Order> findAll(String tenantId, Pageable pageable);
     default Page<Order> findAll(String tenantId, OrderSearchFilter filter, Pageable pageable) {
         return findAll(tenantId, pageable);
