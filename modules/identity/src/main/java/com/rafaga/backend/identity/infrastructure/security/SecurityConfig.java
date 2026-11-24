@@ -76,6 +76,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/public/**").denyAll()
                         .requestMatchers("/api/storefront/**").permitAll()
                         .requestMatchers("/api/media/**").hasAnyRole("SUPER_ADMIN", "STORE_MANAGER")
+                        .requestMatchers("/api/tenant/**").hasAnyRole("SUPER_ADMIN", "STORE_MANAGER")
                         .requestMatchers("/actuator/**", "/api/admin/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/users/me", "/api/users/me/**").hasAnyRole("SUPER_ADMIN", "STORE_MANAGER")
                         .requestMatchers("/api/users/**").hasRole("SUPER_ADMIN")

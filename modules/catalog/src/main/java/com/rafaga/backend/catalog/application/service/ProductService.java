@@ -209,4 +209,9 @@ public class ProductService implements CatalogProductAccess {
     public boolean productExists(UUID productId, String tenantId) {
         return store.findProduct(productId, tenantId).isPresent();
     }
+
+    @Transactional(readOnly = true)
+    public long countProducts() {
+        return store.countProducts(TenantContext.getCurrentTenantId());
+    }
 }

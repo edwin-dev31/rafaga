@@ -199,6 +199,11 @@ public class UserService {
         return identityStore.searchUsers(tenantId, query, status, pageable).map(UserProfile::from);
     }
 
+    @Transactional(readOnly = true)
+    public long countUsers() {
+        return identityStore.countUsers(currentTenantId());
+    }
+
     @Transactional
     public UserProfile registerTenantUser(String tenantId, UserRegistration registration, String requestedRole) {
         String role = normalizeRole(requestedRole);
