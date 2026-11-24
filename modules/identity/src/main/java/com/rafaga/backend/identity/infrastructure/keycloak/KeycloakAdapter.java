@@ -65,6 +65,46 @@ public class KeycloakAdapter implements AuthenticationPort {
     }
 
     @Override
+    public AuthenticationTokens refresh(String refreshToken) {
+        try {
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("grant_type", "refresh_token");
+            form.add("client_id", required(properties.getClientId(), "clientId"));
+            form.add("client_secret", required(properties.getClientSecret(), "clientSecret"));
+            form.add("refresh_token", refreshToken);
+            return requestTokens(form);
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.BadRequest exception) {
+            throw new InvalidCredentialsException();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            throw new IdentityProviderUnavailableException("Authentication service is temporarily unavailable", exception);
+        } catch (HttpClientErrorException exception) {
+            throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
+        }
+    }
+
+    @Override
+    public void logout(String refreshToken) {
+        try {
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("client_id", required(properties.getClientId(), "clientId"));
+            form.add("client_secret", required(properties.getClientSecret(), "clientSecret"));
+            form.add("refresh_token", refreshToken);
+            restClient.post()
+                    .uri(logoutUri())
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.BadRequest exception) {
+            throw new InvalidCredentialsException();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            throw new IdentityProviderUnavailableException("Authentication service is temporarily unavailable", exception);
+        } catch (HttpClientErrorException exception) {
+            throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
+        }
+    }
+
+    @Override
     public TokenValidationResult validateToken(String token) {
         JwtDecoder decoder = jwtDecoderProvider.getIfAvailable();
         if (decoder == null) {
@@ -99,6 +139,11 @@ public class KeycloakAdapter implements AuthenticationPort {
 
     @Override
     public IdentityProfile registerUser(String tenantId, UserRegistration registration) {
+        return registerUser(tenantId, registration, "STORE_MANAGER");
+    }
+
+    @Override
+    public IdentityProfile registerUser(String tenantId, UserRegistration registration, String role) {
         String adminAccessToken;
         try {
             adminAccessToken = requestAdminAccessToken();
@@ -133,13 +178,48 @@ public class KeycloakAdapter implements AuthenticationPort {
         }
         String keycloakId = identifierFrom(response.getHeaders().getLocation());
         try {
-            assignStoreManagerRole(adminAccessToken, keycloakId);
+            assignRealmRole(adminAccessToken, keycloakId, role);
         } catch (ResourceAccessException | HttpServerErrorException exception) {
             log.warn("event=keycloak.provision outcome=ROLE_ASSIGNMENT_FAILED tenantId={}", tenantId);
             throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
         }
-        log.info("event=keycloak.provision outcome=SUCCESS tenantId={}", tenantId);
+        log.info("event=keycloak.provision outcome=SUCCESS tenantId={} role={}", tenantId, role);
         return new IdentityProfile(keycloakId, registration.username(), registration.email(), tenantId);
+    }
+
+    @Override
+    public void setUserEnabled(String keycloakId, boolean enabled) {
+        String adminAccessToken;
+        try {
+            adminAccessToken = requestAdminAccessToken();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.user_status outcome=IDP_UNAVAILABLE reason=admin_token_fetch_failed");
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        }
+        try {
+            restClient.put()
+                    .uri(adminUsersUri() + "/" + keycloakId)
+                    .headers(headers -> headers.setBearerAuth(adminAccessToken))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("enabled", enabled))
+                    .retrieve()
+                    .toBodilessEntity();
+            if (!enabled) {
+                restClient.post()
+                        .uri(adminUsersUri() + "/" + keycloakId + "/logout")
+                        .headers(headers -> headers.setBearerAuth(adminAccessToken))
+                        .retrieve()
+                        .toBodilessEntity();
+            }
+            log.info("event=keycloak.user_status outcome=SUCCESS enabled={}", enabled);
+        } catch (HttpClientErrorException.NotFound exception) {
+            throw new IdentityResourceNotFoundException("User", keycloakId);
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.user_status outcome=IDP_UNAVAILABLE enabled={}", enabled);
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        } catch (HttpClientErrorException exception) {
+            throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
+        }
     }
 
     @Override
@@ -206,6 +286,10 @@ public class KeycloakAdapter implements AuthenticationPort {
         return issuerUri() + "/protocol/openid-connect/token";
     }
 
+    private String logoutUri() {
+        return issuerUri() + "/protocol/openid-connect/logout";
+    }
+
     private String userInfoUri() {
         return issuerUri() + "/protocol/openid-connect/userinfo";
     }
@@ -222,13 +306,13 @@ public class KeycloakAdapter implements AuthenticationPort {
         return adminUsersUri() + "/" + keycloakId + "/role-mappings/realm";
     }
 
-    private String realmRoleUri() {
-        return issuerUri().replace("/realms/", "/admin/realms/") + "/roles/STORE_MANAGER";
+    private String realmRoleUri(String role) {
+        return issuerUri().replace("/realms/", "/admin/realms/") + "/roles/" + role;
     }
 
-    private void assignStoreManagerRole(String adminAccessToken, String keycloakId) {
+    private void assignRealmRole(String adminAccessToken, String keycloakId, String roleName) {
         KeycloakRole role = restClient.get()
-                .uri(realmRoleUri())
+                .uri(realmRoleUri(roleName))
                 .headers(headers -> headers.setBearerAuth(adminAccessToken))
                 .retrieve()
                 .body(KeycloakRole.class);

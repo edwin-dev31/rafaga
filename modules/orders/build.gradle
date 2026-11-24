@@ -5,6 +5,7 @@ dependencies {
 	implementation project(':modules:tenant')
 	implementation project(':modules:catalog')
 	implementation project(':modules:inventory')
+	implementation project(':modules:cart')
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 }

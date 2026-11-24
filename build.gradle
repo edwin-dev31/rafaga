@@ -1,8 +1,15 @@
 plugins {
 	id 'java'
+	id 'checkstyle'
 	id 'jacoco'
 	id 'org.springframework.boot' version '4.1.2'
 	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+checkstyle {
+	toolVersion = '10.21.4'
+	configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+	maxWarnings = 0
 }
 
 group = 'com.rafaga'
@@ -73,6 +80,12 @@ subprojects {
 	apply plugin: 'io.spring.dependency-management'
 	if (path != ':modules') {
 		apply plugin: 'jacoco'
+		apply plugin: 'checkstyle'
+		checkstyle {
+			toolVersion = '10.21.4'
+			configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+			maxWarnings = 0
+		}
 	}
 
 	tasks.withType(JavaCompile).configureEach {

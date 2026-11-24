@@ -10,7 +10,8 @@ import java.util.UUID;
 
 public record CartView(UUID id, String tenantId, OwnerType ownerType, UUID customerId,
         CartStatus status, BigDecimal total, List<CartItemView> items,
-        Instant createdAt, Instant updatedAt, Instant checkedOutAt) {
+        Instant createdAt, Instant updatedAt, Instant checkedOutAt, UUID orderId,
+        String orderPublicToken) {
 
     public static CartView from(Cart cart) {
         return new CartView(
@@ -23,6 +24,8 @@ public record CartView(UUID id, String tenantId, OwnerType ownerType, UUID custo
                 cart.getItems().stream().map(CartItemView::from).toList(),
                 cart.getCreatedAt(),
                 cart.getUpdatedAt(),
-                cart.getCheckedOutAt());
+                cart.getCheckedOutAt(),
+                cart.getOrderId(),
+                cart.getOrderPublicToken());
     }
 }

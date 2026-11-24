@@ -70,6 +70,14 @@ public class User {
         this.lastLoginAt = Objects.requireNonNull(now, "now must not be null");
     }
 
+    public void activate() {
+        this.status = UserStatus.ACTIVE;
+    }
+
+    public void deactivate() {
+        this.status = UserStatus.DISABLED;
+    }
+
     public UUID getId() {
         return id;
     }

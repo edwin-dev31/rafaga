@@ -59,6 +59,12 @@ public class Cart {
     @Column(name = "checked_out_at")
     private Instant checkedOutAt;
 
+    @Column(name = "order_id")
+    private UUID orderId;
+
+    @Column(name = "order_public_token", length = 64)
+    private String orderPublicToken;
+
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartItem> items = new ArrayList<>();
 
@@ -156,7 +162,22 @@ public class Cart {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getCheckedOutAt() { return checkedOutAt; }
+    public UUID getOrderId() { return orderId; }
+    public String getOrderPublicToken() { return orderPublicToken; }
     public List<CartItem> getItems() { return Collections.unmodifiableList(items); }
+
+    /** Links the created order and its public receipt token to a checked-out cart. */
+    public void linkOrder(UUID orderId, String orderPublicToken) {
+        Objects.requireNonNull(orderId, "orderId must not be null");
+        if (status != CartStatus.CHECKED_OUT) {
+            throw new InvalidCartOperationException("Only checked-out carts can be linked to an order");
+        }
+        if (this.orderId != null && !this.orderId.equals(orderId)) {
+            throw new InvalidCartOperationException("Cart is already linked to another order");
+        }
+        this.orderId = orderId;
+        this.orderPublicToken = orderPublicToken;
+    }
 
     /** Merges the items from another cart into this cart (guest → customer merge). */
     public void mergeCart(Cart other, Instant now) {

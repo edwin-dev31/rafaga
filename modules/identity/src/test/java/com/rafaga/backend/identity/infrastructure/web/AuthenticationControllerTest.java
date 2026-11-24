@@ -1,6 +1,7 @@
 package com.rafaga.backend.identity.infrastructure.web;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,6 +55,27 @@ class AuthenticationControllerTest {
                         .content("{\"username\":\"person\",\"password\":\"secret\"}"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.message").value("Authentication service is temporarily unavailable"));
+    }
+
+    @Test
+    void refreshesAndLogsOutSessionThroughBackendEndpoints() throws Exception {
+        UserService service = mock(UserService.class);
+        when(service.refreshSession("refresh-1"))
+                .thenReturn(new AuthenticationTokens("access-2", "refresh-2", "Bearer", 300));
+
+        mockMvc(service).perform(post("/api/public/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"refresh-1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-2"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-2"));
+
+        mockMvc(service).perform(post("/api/public/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"refresh-2\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(service).logoutSession("refresh-2");
     }
 
     private MockMvc mockMvc(UserService service) {

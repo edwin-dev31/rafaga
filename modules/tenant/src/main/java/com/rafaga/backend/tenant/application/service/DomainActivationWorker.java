@@ -130,6 +130,7 @@ public class DomainActivationWorker {
     private void handleRequested(TenantDomainControl domain, String opType, String key, Instant now) {
         CustomHostnameStatus status = cloudflare.createOrGetCustomHostname(domain.getDomain());
         domain.recordExternalHostnameId(status.externalId(), now);
+        domain.recordOwnershipVerification(status.verificationRecordName(), status.verificationRecordValue(), now);
         if (status.failed()) {
             failDomain(domain, safeCode(status.failureCode(), "CLOUDFLARE_HOSTNAME_FAILED"), now);
             recordFailedOperation(domain, opType, key, domain.getLastFailureCode(), now);
@@ -150,6 +151,7 @@ public class DomainActivationWorker {
         if (domain.getExternalHostnameId() == null && status.externalId() != null) {
             domain.recordExternalHostnameId(status.externalId(), now);
         }
+        domain.recordOwnershipVerification(status.verificationRecordName(), status.verificationRecordValue(), now);
         if (status.failed()) {
             String code = safeCode(status.failureCode(), "OWNERSHIP_VERIFICATION_FAILED");
             failDomain(domain, code, now);

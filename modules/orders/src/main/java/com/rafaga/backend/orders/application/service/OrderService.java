@@ -11,6 +11,7 @@ import com.rafaga.backend.inventory.application.service.StockService;
 import com.rafaga.backend.orders.application.command.CreateOrder;
 import com.rafaga.backend.orders.application.exception.OrderConflictException;
 import com.rafaga.backend.orders.application.exception.OrderNotFoundException;
+import com.rafaga.backend.orders.application.port.OrderSearchFilter;
 import com.rafaga.backend.orders.application.port.OrderStore;
 import com.rafaga.backend.orders.domain.event.OrderCompletedEvent;
 import com.rafaga.backend.orders.domain.event.OrderCreatedEvent;
@@ -19,9 +20,14 @@ import com.rafaga.backend.orders.domain.model.Order;
 import com.rafaga.backend.orders.domain.model.OrderLine;
 import com.rafaga.backend.orders.domain.model.OrderStatus;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.Instant;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -59,7 +65,37 @@ public class OrderService {
         Order order = new Order(tenantId, command.customerId(), clock.instant());
         for (CreateOrder.Line line : command.lines()) {
             ProductView product = products.getProductById(line.productId());
-            order.addLine(line.productId(), line.variantId(), line.quantity(), unitPrice(product, line.variantId()));
+            addSnapshottedLine(order, product, line.variantId(), line.quantity());
+        }
+        for (OrderLine line : order.getLines()) {
+            stock.reserveStock(line.getProductId(), line.getVariantId(), line.getQuantity(),
+                    order.getId().toString(), null);
+        }
+        Order saved = store.save(order);
+        events.publishEvent(new OrderCreatedEvent(saved.getId(), tenantId, saved.getCustomerId()));
+        return OrderView.from(saved);
+    }
+
+    /**
+     * Creates an order from a checked-out cart, idempotently by {@code (tenantId, cartId)}.
+     * Reserves stock for every line inside the caller's transaction so insufficient stock
+     * rolls back both the order and the cart checkout atomically.
+     */
+    @Transactional
+    public OrderView createOrderFromCart(UUID cartId, UUID customerId, List<CreateOrder.Line> lines) {
+        Objects.requireNonNull(cartId, "cartId must not be null");
+        if (lines == null || lines.isEmpty()) {
+            throw new IllegalArgumentException("Order must have at least one line");
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        Optional<Order> existing = store.findByCartId(tenantId, cartId);
+        if (existing.isPresent()) {
+            return OrderView.from(existing.get());
+        }
+        Order order = Order.fromCart(tenantId, cartId, customerId, clock.instant());
+        for (CreateOrder.Line line : lines) {
+            ProductView product = products.getProductById(line.productId());
+            addSnapshottedLine(order, product, line.variantId(), line.quantity());
         }
         for (OrderLine line : order.getLines()) {
             stock.reserveStock(line.getProductId(), line.getVariantId(), line.getQuantity(),
@@ -71,13 +107,86 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public Optional<OrderView> findOrderByCartId(UUID cartId) {
+        return store.findByCartId(TenantContext.getCurrentTenantId(), cartId).map(OrderView::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<OrderView> findOrderByPublicToken(String publicToken) {
+        if (publicToken == null || publicToken.isBlank()) {
+            return Optional.empty();
+        }
+        return store.findByPublicToken(TenantContext.getCurrentTenantId(), publicToken.trim())
+                .map(OrderView::from);
+    }
+
+    @Transactional(readOnly = true)
     public OrderView getOrderById(UUID orderId) {
         return OrderView.from(order(orderId, TenantContext.getCurrentTenantId()));
     }
 
     @Transactional(readOnly = true)
     public Page<OrderView> getOrders(Pageable pageable) {
-        return store.findAll(TenantContext.getCurrentTenantId(), pageable).map(OrderView::from);
+        return getOrders(OrderSearchFilter.empty(), pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderView> getOrders(OrderSearchFilter filter, Pageable pageable) {
+        if (filter != null && filter.from() != null && filter.to() != null && filter.from().isAfter(filter.to())) {
+            throw new IllegalArgumentException("'from' must not be after 'to'");
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        if (filter == null || filter.isEmpty()) {
+            return store.findAll(tenantId, pageable).map(OrderView::from);
+        }
+        return store.findAll(tenantId, filter, pageable).map(OrderView::from);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderReportView getOrderReport(Instant from, Instant to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("'from' must not be after 'to'");
+        }
+        String tenantId = TenantContext.getCurrentTenantId();
+        OrderSearchFilter filter = new OrderSearchFilter(null, null, from, to);
+        List<Order> matching = store.findAll(tenantId, filter, Pageable.unpaged()).getContent();
+
+        Map<OrderStatus, Long> counts = new EnumMap<>(OrderStatus.class);
+        Map<OrderStatus, BigDecimal> amounts = new EnumMap<>(OrderStatus.class);
+        for (OrderStatus status : OrderStatus.values()) {
+            counts.put(status, 0L);
+            amounts.put(status, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        }
+
+        long activeOrderCount = 0;
+        BigDecimal grossAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        for (Order order : matching) {
+            OrderStatus status = order.getStatus();
+            counts.put(status, counts.get(status) + 1);
+            amounts.put(status, amounts.get(status).add(order.getTotal()));
+            if (status != OrderStatus.CANCELLED) {
+                activeOrderCount++;
+                grossAmount = grossAmount.add(order.getTotal());
+            }
+        }
+
+        BigDecimal average = activeOrderCount == 0
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : grossAmount.divide(BigDecimal.valueOf(activeOrderCount), 2, RoundingMode.HALF_UP);
+
+        List<OrderReportView.StatusBreakdown> breakdown = List.of(OrderStatus.values()).stream()
+                .map(status -> new OrderReportView.StatusBreakdown(
+                        status.name(), counts.get(status), amounts.get(status)))
+                .toList();
+
+        return new OrderReportView(
+                from,
+                to,
+                matching.size(),
+                grossAmount,
+                average,
+                breakdown,
+                OrderReportView.PAYMENT_DISCLAIMER);
     }
 
     @Transactional
@@ -137,14 +246,19 @@ public class OrderService {
         return reservations;
     }
 
-    private BigDecimal unitPrice(ProductView product, UUID variantId) {
-        if (variantId == null) return product.basePrice();
+    private void addSnapshottedLine(Order order, ProductView product, UUID variantId, int quantity) {
+        if (variantId == null) {
+            order.addLine(product.id(), null, quantity, product.basePrice(),
+                    product.name(), product.sku(), null);
+            return;
+        }
         ProductView.VariantView variant = product.variants().stream()
                 .filter(candidate -> variantId.equals(candidate.id()))
                 .findFirst().orElseThrow(() -> new CatalogNotFoundException("Product variant", variantId));
         BigDecimal price = product.basePrice().add(variant.priceAdjustment());
         if (price.signum() < 0) throw new OrderConflictException("Product variant price is negative");
-        return price;
+        String resolvedSku = (variant.sku() != null && !variant.sku().isBlank()) ? variant.sku() : product.sku();
+        order.addLine(product.id(), variantId, quantity, price, product.name(), resolvedSku, variant.name());
     }
 
     private Order order(UUID id, String tenantId) {

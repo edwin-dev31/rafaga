@@ -1,14 +1,20 @@
 package com.rafaga.backend.catalog.infrastructure.persistence;
 
 import com.rafaga.backend.catalog.application.port.CatalogStore;
+import com.rafaga.backend.catalog.application.port.ProductSearchFilter;
 import com.rafaga.backend.catalog.domain.model.Category;
 import com.rafaga.backend.catalog.domain.model.Product;
 import com.rafaga.backend.catalog.domain.model.ProductStatus;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Predicate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -42,6 +48,35 @@ class JpaCatalogStore implements CatalogStore {
     @Override
     public Page<Product> searchProducts(String tenantId, Pageable pageable) {
         return products.findAllByTenantId(tenantId, pageable);
+    }
+
+    @Override
+    public Page<Product> searchProducts(String tenantId, ProductSearchFilter filter, Pageable pageable) {
+        if (filter == null || filter.isEmpty()) {
+            return products.findAllByTenantId(tenantId, pageable);
+        }
+        Specification<Product> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("tenantId"), tenantId));
+            if (filter.query() != null && !filter.query().isBlank()) {
+                String pattern = "%" + filter.query().trim().toLowerCase(Locale.ROOT) + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("name")), pattern),
+                        cb.like(cb.lower(root.get("sku")), pattern)));
+            }
+            if (filter.status() != null) {
+                predicates.add(cb.equal(root.get("status"), filter.status()));
+            }
+            if (filter.categoryId() != null) {
+                Join<Product, Category> categoryJoin = root.join("categories");
+                predicates.add(cb.equal(categoryJoin.get("id"), filter.categoryId()));
+                if (query != null) {
+                    query.distinct(true);
+                }
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        return products.findAll(spec, pageable);
     }
 
     @Override

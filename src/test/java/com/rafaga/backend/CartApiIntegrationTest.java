@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import com.rafaga.backend.identity.application.port.IdentityStore;
 import com.rafaga.backend.identity.domain.model.User;
+import com.rafaga.backend.inventory.application.service.StockService;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
@@ -44,6 +45,7 @@ class CartApiIntegrationTest {
     @Autowired private ObjectMapper mapper;
     @Autowired private TenantRegistry tenants;
     @Autowired private IdentityStore identities;
+    @Autowired private StockService stock;
 
     @BeforeEach
     void registerTenants() {
@@ -62,6 +64,8 @@ class CartApiIntegrationTest {
     void createsPricesAndChecksOutTheActiveCart() throws Exception {
         Customer customer = createCustomer(TENANT_A, "cart-owner");
         ProductFixture product = createProductWithVariant(customer);
+        awaitStock(customer, product.id(), product.variantId());
+        adjustStock(TENANT_A, product.id(), product.variantId(), 10);
 
         MvcResult created = mvc.perform(get("/api/carts").param("customerId", customer.id().toString())
                         .header("Host", HOST_A).with(jwtFor(TENANT_A, customer.keycloakId())))
@@ -86,11 +90,42 @@ class CartApiIntegrationTest {
                 .andExpect(jsonPath("$.id").value(cartId))
                 .andExpect(jsonPath("$.total").value(25.00));
 
-        mvc.perform(post("/api/carts/checkout").param("customerId", customer.id().toString())
+        MvcResult checkedOut = mvc.perform(post("/api/carts/checkout").param("customerId", customer.id().toString())
                         .header("Host", HOST_A).with(jwtFor(TENANT_A, customer.keycloakId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CHECKED_OUT"))
-                .andExpect(jsonPath("$.checkedOutAt").isNotEmpty());
+                .andExpect(jsonPath("$.checkedOutAt").isNotEmpty())
+                .andExpect(jsonPath("$.orderId").isNotEmpty())
+                .andExpect(jsonPath("$.orderPublicToken").isNotEmpty())
+                .andReturn();
+        var checkedOutJson = mapper.readTree(checkedOut.getResponse().getContentAsString());
+        String orderId = checkedOutJson.path("orderId").asText();
+        String publicToken = checkedOutJson.path("orderPublicToken").asText();
+
+        mvc.perform(get("/api/storefront/orders/{publicToken}", publicToken).header("Host", HOST_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderId").value(orderId))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.total").value(25.00))
+                .andExpect(jsonPath("$.items[0].variantName").value("Large"));
+
+        mvc.perform(get("/api/storefront/orders/{publicToken}", publicToken).header("Host", HOST_B))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(get("/api/orders/{orderId}", orderId).header("Host", HOST_A)
+                        .with(jwtFor(TENANT_A, customer.keycloakId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(orderId))
+                .andExpect(jsonPath("$.cartId").value(cartId))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.total").value(25.00));
+
+        mvc.perform(get("/api/stock/{productId}", product.id())
+                        .param("variantId", product.variantId().toString())
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, customer.keycloakId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.availableQuantity").value(8))
+                .andExpect(jsonPath("$.reservedQuantity").value(2));
 
         MvcResult next = mvc.perform(get("/api/carts").param("customerId", customer.id().toString())
                         .header("Host", HOST_A).with(jwtFor(TENANT_A, customer.keycloakId())))
@@ -100,6 +135,25 @@ class CartApiIntegrationTest {
                 .andReturn();
         String nextCartId = mapper.readTree(next.getResponse().getContentAsString()).path("id").asText();
         org.assertj.core.api.Assertions.assertThat(nextCartId).isNotEqualTo(cartId);
+    }
+
+    @Test
+    void rollsBackCheckoutAndKeepsCartActiveWhenStockIsInsufficient() throws Exception {
+        Customer customer = createCustomer(TENANT_A, "cart-nostock");
+        ProductFixture product = createProductWithVariant(customer);
+        awaitStock(customer, product.id(), product.variantId());
+
+        upsertItem(customer, product, 3);
+
+        mvc.perform(post("/api/carts/checkout").param("customerId", customer.id().toString())
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, customer.keycloakId())))
+                .andExpect(status().isConflict());
+
+        mvc.perform(get("/api/carts").param("customerId", customer.id().toString())
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, customer.keycloakId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.items[0].quantity").value(3));
     }
 
     @Test
@@ -208,6 +262,29 @@ class CartApiIntegrationTest {
     private org.springframework.test.web.servlet.request.RequestPostProcessor jwtForCustomer(
             String tenantId, String keycloakId) {
         return jwt().jwt(token -> token.subject(keycloakId).claim("tenant_id", tenantId));
+    }
+
+    private void adjustStock(String tenantId, UUID productId, UUID variantId, int delta) {
+        TenantContext.setCurrentTenantId(tenantId);
+        try {
+            stock.adjustStock(productId, variantId, delta, "Cart checkout test stock");
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    private void awaitStock(Customer customer, UUID productId, UUID variantId) throws Exception {
+        for (int attempt = 0; attempt < 50; attempt++) {
+            var request = get("/api/stock/{productId}", productId).header("Host", HOST_A)
+                    .with(jwtFor(TENANT_A, customer.keycloakId()));
+            if (variantId != null) request.param("variantId", variantId.toString());
+            if (mvc.perform(request).andReturn().getResponse().getStatus() == 200) return;
+            Thread.sleep(100);
+        }
+        var request = get("/api/stock/{productId}", productId).header("Host", HOST_A)
+                .with(jwtFor(TENANT_A, customer.keycloakId()));
+        if (variantId != null) request.param("variantId", variantId.toString());
+        mvc.perform(request).andExpect(status().isOk());
     }
 
     private TenantConfig tenant(String id, String host) {

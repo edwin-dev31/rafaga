@@ -54,6 +54,16 @@ public class TenantAdminController {
                 .toList();
     }
 
+    @PostMapping("/{tenantId}/deactivate")
+    public TenantResponse deactivate(@PathVariable("tenantId") String tenantId) {
+        return TenantResponse.from(tenantService.deactivateTenant(tenantId));
+    }
+
+    @PostMapping("/{tenantId}/reactivate")
+    public TenantResponse reactivate(@PathVariable("tenantId") String tenantId) {
+        return TenantResponse.from(tenantService.reactivateTenant(tenantId));
+    }
+
     public record TenantRequest(
             @NotBlank String name,
             @NotEmpty List<@NotBlank String> domains,

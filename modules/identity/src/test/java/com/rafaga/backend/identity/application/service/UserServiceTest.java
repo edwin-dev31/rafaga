@@ -22,7 +22,14 @@ import com.rafaga.backend.identity.application.port.UserRegistration;
 import com.rafaga.backend.identity.application.security.RegistrationProperties;
 import com.rafaga.backend.identity.application.security.RegistrationTokenValidator;
 import com.rafaga.backend.identity.domain.model.User;
+import com.rafaga.backend.identity.domain.model.UserStatus;
+import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.domain.model.DeploymentMode;
+import com.rafaga.backend.tenant.domain.model.TenantConfig;
+import com.rafaga.backend.tenant.domain.model.TenantStatus;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -205,6 +212,50 @@ class UserServiceTest {
         assertThatThrownBy(() -> service.resetUserPassword(otherTenantUserId, "AdminResetPass123!", false))
                 .isInstanceOf(IdentityResourceNotFoundException.class);
         verify(authentication, never()).updatePassword(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    void authenticatesFromDashboardWithoutHostTenantByResolvingJwtTenantClaim() {
+        TenantContext.clear();
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        IdentityStore store = mock(IdentityStore.class);
+        TenantRegistry registry = mock(TenantRegistry.class);
+        when(authentication.login("manager", "Pass123!"))
+                .thenReturn(new AuthenticationTokens("access-1", "refresh-1", "Bearer", 300));
+        when(authentication.getUserInfo("access-1"))
+                .thenReturn(new IdentityProfile("kc-1", "manager", "manager@tienda.test", TENANT_ID));
+        when(registry.findById(TENANT_ID)).thenReturn(Optional.of(new TenantConfig(
+                TENANT_ID, "Tienda", List.of("tienda.test"), DeploymentMode.SHARED_DB,
+                null, "starter", TenantStatus.ACTIVE, Map.of())));
+        when(store.findUserByKeycloakId(TENANT_ID, "kc-1")).thenReturn(Optional.empty());
+        when(store.saveUser(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RegistrationProperties props = new RegistrationProperties();
+        props.setRegistrationToken("registration-token");
+        UserService service = new UserService(
+                authentication, store, new RegistrationTokenValidator(props), null, registry, null, Clock.systemUTC());
+
+        AuthenticationTokens tokens = service.authenticateUser("manager", "Pass123!");
+
+        assertThat(tokens.accessToken()).isEqualTo("access-1");
+        assertThat(TenantContext.isSet()).isFalse();
+        verify(store).saveUser(any(User.class));
+    }
+
+    @Test
+    void togglesTenantUserStatusInKeycloakAndLocalStore() {
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        IdentityStore store = mock(IdentityStore.class);
+        UUID userId = UUID.randomUUID();
+        User user = new User(TENANT_ID, "kc-55", "manager", "manager@tienda.test", Instant.now());
+        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
+        when(store.saveUser(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        UserService service = service(authentication, store);
+
+        UserProfile disabled = service.setTenantUserStatus(TENANT_ID, userId, UserStatus.DISABLED);
+
+        assertThat(disabled.status()).isEqualTo(UserStatus.DISABLED);
+        verify(authentication).setUserEnabled("kc-55", false);
     }
 
     private void authenticateJwt(String subject, String username, String tenantId) {

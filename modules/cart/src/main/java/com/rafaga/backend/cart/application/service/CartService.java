@@ -2,8 +2,10 @@ package com.rafaga.backend.cart.application.service;
 
 import com.rafaga.backend.cart.application.command.UpsertCartItem;
 import com.rafaga.backend.cart.application.exception.CartNotFoundException;
+import com.rafaga.backend.cart.application.port.CartOrderLookup;
 import com.rafaga.backend.cart.application.port.CartStore;
 import com.rafaga.backend.cart.application.port.CartCustomerAccess;
+import com.rafaga.backend.cart.application.port.GuestCheckoutCustomerResolver;
 import com.rafaga.backend.cart.application.service.storefront.GuestSessionService;
 import com.rafaga.backend.cart.domain.event.CartCheckedOutEvent;
 import com.rafaga.backend.cart.domain.model.Cart;
@@ -15,6 +17,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -29,22 +32,36 @@ public class CartService {
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final GuestSessionService guestSessions;
+    private final CartOrderLookup orderLookup;
+    private final GuestCheckoutCustomerResolver guestCustomerResolver;
 
     @Autowired
     public CartService(CartStore store, CartCustomerAccess customerAccess,
             ProductService products, ApplicationEventPublisher events,
-            GuestSessionService guestSessions) {
-        this(store, customerAccess, products, events, Clock.systemUTC(), guestSessions);
+            GuestSessionService guestSessions, ObjectProvider<CartOrderLookup> orderLookup,
+            ObjectProvider<GuestCheckoutCustomerResolver> guestCustomerResolver) {
+        this(store, customerAccess, products, events, Clock.systemUTC(), guestSessions,
+                orderLookup.getIfAvailable(() -> cartId -> Optional.empty()),
+                guestCustomerResolver.getIfAvailable(() -> (name, email, phone) -> Optional.empty()));
     }
 
     CartService(CartStore store, CartCustomerAccess customerAccess, ProductService products,
             ApplicationEventPublisher events, Clock clock, GuestSessionService guestSessions) {
+        this(store, customerAccess, products, events, clock, guestSessions,
+                cartId -> Optional.empty(), (name, email, phone) -> Optional.empty());
+    }
+
+    CartService(CartStore store, CartCustomerAccess customerAccess, ProductService products,
+            ApplicationEventPublisher events, Clock clock, GuestSessionService guestSessions,
+            CartOrderLookup orderLookup, GuestCheckoutCustomerResolver guestCustomerResolver) {
         this.store = store;
         this.customerAccess = customerAccess;
         this.products = products;
         this.events = events;
         this.clock = clock;
         this.guestSessions = guestSessions;
+        this.orderLookup = orderLookup;
+        this.guestCustomerResolver = guestCustomerResolver;
     }
 
     /** Returns the active cart for the customer, creating one if it does not exist. */
@@ -100,6 +117,7 @@ public class CartService {
                                 item.getProductId(), item.getVariantId(),
                                 item.getQuantity(), item.getUnitPrice()))
                         .toList()));
+        saved = attachOrderReference(saved);
         return CartView.from(saved);
     }
 
@@ -165,22 +183,36 @@ public class CartService {
         return CartView.from(store.save(cart));
     }
 
-    /** Checks out the guest's active cart. */
+    /** Checks out the guest's active cart without customer contact details. */
     @Transactional
     public CartView guestCheckout(String guestSessionId) {
+        return guestCheckout(guestSessionId, null, null, null);
+    }
+
+    /**
+     * Checks out the guest's active cart, optionally capturing pre-WhatsApp customer details.
+     * If no name is provided, proceeds as an anonymous guest order without error.
+     */
+    @Transactional
+    public CartView guestCheckout(String guestSessionId, String customerName,
+            String customerEmail, String customerPhone) {
         String tenantId = TenantContext.getCurrentTenantId();
         String sessionHash = requireGuestSession(guestSessionId);
         Cart cart = store.findActiveByGuestSession(tenantId, sessionHash)
                 .orElseThrow(() -> new CartNotFoundException(sessionHash));
+        UUID resolvedCustomerId = guestCustomerResolver
+                .resolveOrCreateCustomer(customerName, customerEmail, customerPhone)
+                .orElse(null);
         cart.checkout(clock.instant());
         Cart saved = store.save(cart);
         events.publishEvent(new CartCheckedOutEvent(
-                saved.getId(), tenantId, null,
+                saved.getId(), tenantId, resolvedCustomerId,
                 saved.getItems().stream()
                         .map(item -> new CartCheckedOutEvent.Line(
                                 item.getProductId(), item.getVariantId(),
                                 item.getQuantity(), item.getUnitPrice()))
                         .toList()));
+        saved = attachOrderReference(saved);
         return CartView.from(saved);
     }
 
@@ -224,6 +256,15 @@ public class CartService {
                 .findFirst()
                 .map(v -> product.basePrice().add(v.priceAdjustment()))
                 .orElseThrow(() -> new CatalogNotFoundException("Product variant", variantId));
+    }
+
+    private Cart attachOrderReference(Cart cart) {
+        Optional<CartOrderLookup.OrderReference> order = orderLookup.findOrderByCartId(cart.getId());
+        if (order.isEmpty()) {
+            return cart;
+        }
+        cart.linkOrder(order.get().orderId(), order.get().publicToken());
+        return store.save(cart);
     }
 
     private String requireGuestSession(String guestSessionId) {

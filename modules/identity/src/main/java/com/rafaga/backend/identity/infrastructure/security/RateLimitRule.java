@@ -7,7 +7,8 @@ enum RateLimitRule {
     LOGIN("login") {
         @Override
         boolean matches(String method, String path) {
-            return "POST".equals(method) && "/api/public/auth/login".equals(path);
+            return "POST".equals(method)
+                    && ("/api/public/auth/login".equals(path) || "/api/public/auth/refresh".equals(path));
         }
 
         @Override

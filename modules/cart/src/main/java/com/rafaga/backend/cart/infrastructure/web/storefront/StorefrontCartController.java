@@ -82,9 +82,12 @@ public class StorefrontCartController {
     @ResponseStatus(HttpStatus.OK)
     public ResponseEntity<CartView> checkout(
             @CookieValue(value = GUEST_SESSION_COOKIE, required = false) String guestSessionId,
+            @RequestBody(required = false) GuestCheckoutRequest request,
             HttpServletResponse response) {
         String sessionId = resolveOrCreateSession(guestSessionId, response);
-        CartView cart = cartService.guestCheckout(sessionId);
+        CartView cart = request == null
+                ? cartService.guestCheckout(sessionId)
+                : cartService.guestCheckout(sessionId, request.fullName(), request.email(), request.phone());
         return ResponseEntity.ok()
                 .cacheControl(NO_STORE)
                 .body(cart);
@@ -118,4 +121,9 @@ public class StorefrontCartController {
             @NotNull UUID productId,
             UUID variantId,
             @NotNull @Min(1) Integer quantity) { }
+
+    public record GuestCheckoutRequest(
+            String fullName,
+            String email,
+            String phone) { }
 }

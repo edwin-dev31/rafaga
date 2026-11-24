@@ -29,6 +29,17 @@ public class AuthenticationController {
         return TokenResponse.from(userService.authenticateUser(request.username(), request.password()));
     }
 
+    @PostMapping("/refresh")
+    public TokenResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return TokenResponse.from(userService.refreshSession(request.refreshToken()));
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@Valid @RequestBody RefreshTokenRequest request) {
+        userService.logoutSession(request.refreshToken());
+    }
+
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse register(
@@ -45,6 +56,9 @@ public class AuthenticationController {
     }
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {
+    }
+
+    public record RefreshTokenRequest(@NotBlank String refreshToken) {
     }
 
     public record RegistrationRequest(
