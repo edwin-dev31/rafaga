@@ -32,6 +32,8 @@ class RateLimitFilterTest {
         properties = new RateLimitProperties();
         properties.setWindow(java.time.Duration.ofMinutes(1));
         properties.setLoginPerWindow(4);
+        properties.setTokenRefreshPerWindow(4);
+        properties.setLogoutPerWindow(4);
         properties.setPasswordChangePerWindow(4);
         properties.setRegistrationPerWindow(4);
         properties.setMediaUploadPerWindow(4);
@@ -54,6 +56,20 @@ class RateLimitFilterTest {
         assertThat(rejected.getStatus()).isEqualTo(429);
         assertThat(rejected.getHeader("Retry-After")).isEqualTo("60");
         assertThat(rejected.getContentAsString()).contains("RATE_LIMITED");
+    }
+
+    @Test
+    void keepsTokenRefreshAndLogoutRateLimitsSeparateFromLogin() throws Exception {
+        String ip = "198.51.100.20";
+        assertThat(send("POST", "/api/public/auth/refresh", ip).getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/public/auth/refresh", ip).getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/public/auth/refresh", ip).getStatus()).isEqualTo(429);
+
+        // Exhausting token refresh must not block login or logout from the same IP
+        assertThat(send("POST", "/api/public/auth/login", ip).getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/public/auth/logout", ip).getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/public/auth/logout", ip).getStatus()).isEqualTo(200);
+        assertThat(send("POST", "/api/public/auth/logout", ip).getStatus()).isEqualTo(429);
     }
 
     @Test

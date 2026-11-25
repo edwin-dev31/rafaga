@@ -7,13 +7,44 @@ enum RateLimitRule {
     LOGIN("login") {
         @Override
         boolean matches(String method, String path) {
-            return "POST".equals(method)
-                    && ("/api/public/auth/login".equals(path) || "/api/public/auth/refresh".equals(path));
+            return "POST".equals(method) && "/api/public/auth/login".equals(path);
         }
 
         @Override
         int limit(RateLimitProperties properties) {
             return properties.getLoginPerWindow();
+        }
+
+        @Override
+        String clientKey(HttpServletRequest request) {
+            return remoteAddress(request);
+        }
+    },
+    TOKEN_REFRESH("token-refresh") {
+        @Override
+        boolean matches(String method, String path) {
+            return "POST".equals(method) && "/api/public/auth/refresh".equals(path);
+        }
+
+        @Override
+        int limit(RateLimitProperties properties) {
+            return properties.getTokenRefreshPerWindow();
+        }
+
+        @Override
+        String clientKey(HttpServletRequest request) {
+            return remoteAddress(request);
+        }
+    },
+    LOGOUT("logout") {
+        @Override
+        boolean matches(String method, String path) {
+            return "POST".equals(method) && "/api/public/auth/logout".equals(path);
+        }
+
+        @Override
+        int limit(RateLimitProperties properties) {
+            return properties.getLogoutPerWindow();
         }
 
         @Override

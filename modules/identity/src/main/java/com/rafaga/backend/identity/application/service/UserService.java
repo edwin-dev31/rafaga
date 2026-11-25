@@ -170,14 +170,19 @@ public class UserService {
                 if (profile.tenantId() != null && !requestedTenantId.equals(profile.tenantId())) {
                     throw new CrossTenantAccessException();
                 }
+                verifyUserNotDisabledInTransaction(requestedTenantId, profile.keycloakId());
             } else if (profile.tenantId() != null && !profile.tenantId().isBlank()) {
                 verifyActiveTenant(profile.tenantId());
+                verifyUserNotDisabledInTenant(profile.tenantId(), profile.keycloakId());
             }
             log.info("event=auth.refresh outcome=SUCCESS tenantId={}",
                     requestedTenantId != null ? requestedTenantId : profile.tenantId());
             return tokens;
         } catch (InvalidCredentialsException exception) {
             log.warn("event=auth.refresh outcome=INVALID_CREDENTIALS");
+            throw exception;
+        } catch (CrossTenantAccessException exception) {
+            log.warn("event=auth.refresh outcome=CROSS_TENANT_DENIED");
             throw exception;
         } catch (IdentityProviderUnavailableException exception) {
             log.warn("event=auth.refresh outcome=IDP_UNAVAILABLE");
@@ -419,9 +424,42 @@ public class UserService {
         if (user == null) {
             user = new User(tenantId, profile.keycloakId(), profile.username(), profile.email(), clock.instant());
         } else {
+            if (user.getStatus() == UserStatus.DISABLED) {
+                throw new InvalidCredentialsException();
+            }
             user.updateProfile(profile.username(), profile.email(), clock.instant());
         }
         return UserProfile.from(identityStore.saveUser(user), safeRoles(roles));
+    }
+
+    private void verifyUserNotDisabledInTransaction(String tenantId, String keycloakId) {
+        if (requiresNewTransaction != null) {
+            requiresNewTransaction.executeWithoutResult(status -> verifyUserNotDisabled(tenantId, keycloakId));
+        } else {
+            verifyUserNotDisabled(tenantId, keycloakId);
+        }
+    }
+
+    private void verifyUserNotDisabledInTenant(String tenantId, String keycloakId) {
+        String previousTenantId = TenantContext.isSet() ? TenantContext.getCurrentTenantId() : null;
+        TenantContext.setCurrentTenantId(tenantId);
+        try {
+            verifyUserNotDisabledInTransaction(tenantId, keycloakId);
+        } finally {
+            if (previousTenantId == null) {
+                TenantContext.clear();
+            } else {
+                TenantContext.setCurrentTenantId(previousTenantId);
+            }
+        }
+    }
+
+    private void verifyUserNotDisabled(String tenantId, String keycloakId) {
+        identityStore.findUserByKeycloakId(tenantId, keycloakId)
+                .filter(user -> user.getStatus() == UserStatus.DISABLED)
+                .ifPresent(user -> {
+                    throw new InvalidCredentialsException();
+                });
     }
 
     private void synchronizeProfileInTransaction(String tenantId, IdentityProfile profile) {

@@ -18,11 +18,13 @@ validates Keycloak JWTs and reads roles from the `roles` or
 | `STORE_MANAGER` | Tenant-scoped catalog, inventory, orders, carts, and own profile. |
 | `CUSTOMER` | Storefront customer flows only; it cannot use backoffice endpoints. |
 
-`POST /api/public/auth/login` is public and returns Keycloak tokens through the
-backend. `POST /api/public/auth/register` requires both a `SUPER_ADMIN` token
-and the `X-Registration-Token` header. All other `/api/public/**` paths are
-denied by default. See [role-access-strategy.md](../security/role-access-strategy.md) for
-the complete authorization matrix.
+`POST /api/public/auth/login`, `POST /api/public/auth/refresh`, and `POST /api/public/auth/logout`
+are public session endpoints backed by Keycloak (see [auth-pkce-migration.md](../security/auth-pkce-migration.md)
+for the planned Authorization Code + PKCE transition). `POST /api/public/auth/register`
+requires both a `SUPER_ADMIN` token and the `X-Registration-Token` header; for dashboard
+onboarding, `SUPER_ADMIN` should prefer `POST /api/admin/tenants/{tenantId}/users`. All other
+`/api/public/**` paths are denied by default. See [role-access-strategy.md](../security/role-access-strategy.md)
+for the complete authorization matrix.
 
 ## Tenant resolution
 
@@ -42,7 +44,7 @@ mismatch returns `401`; inactive tenants return `404`.
 | Group | Paths | Access |
 | --- | --- | --- |
 | Health probes | `GET /actuator/health/**` | Public, minimal response in production. |
-| Authentication | `/api/public/auth/login`, `/api/public/auth/register` | See authentication rules above. |
+| Authentication | `/api/public/auth/login`, `/api/public/auth/refresh`, `/api/public/auth/logout`, `/api/public/auth/register` | Public session endpoints with dedicated rate limits; `register` requires `SUPER_ADMIN` + `X-Registration-Token`. |
 | Storefront | `/api/storefront/**` | Public catalog and guest-cart operations; customer endpoints validate the customer JWT and ownership. |
 | Backoffice catalog | `/api/products/**`, `/api/categories/**` | `SUPER_ADMIN` or `STORE_MANAGER`; requires the `catalog` feature. |
 | Backoffice inventory | `/api/stock/**` | `SUPER_ADMIN` or `STORE_MANAGER`; requires the `inventory` feature. |

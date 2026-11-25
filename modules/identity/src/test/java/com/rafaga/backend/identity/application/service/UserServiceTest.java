@@ -298,6 +298,31 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void rejectsLoginAndRefreshWhenLocalUserIsDisabled() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        IdentityStore store = mock(IdentityStore.class);
+        User disabledUser = new User(TENANT_ID, "kc-disabled", "disabled.mgr", "disabled@tienda.test", Instant.now());
+        disabledUser.deactivate();
+        when(authentication.login("disabled.mgr", "Pass123!"))
+                .thenReturn(new AuthenticationTokens("access-1", "refresh-1", "Bearer", 300));
+        when(authentication.refresh("refresh-1"))
+                .thenReturn(new AuthenticationTokens("access-2", "refresh-2", "Bearer", 300));
+        when(authentication.getUserInfo("access-1"))
+                .thenReturn(new IdentityProfile("kc-disabled", "disabled.mgr", "disabled@tienda.test", TENANT_ID));
+        when(authentication.getUserInfo("access-2"))
+                .thenReturn(new IdentityProfile("kc-disabled", "disabled.mgr", "disabled@tienda.test", TENANT_ID));
+        when(store.findUserByKeycloakId(TENANT_ID, "kc-disabled")).thenReturn(Optional.of(disabledUser));
+        UserService service = service(authentication, store);
+
+        assertThatThrownBy(() -> service.authenticateUser("disabled.mgr", "Pass123!"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        assertThatThrownBy(() -> service.refreshSession("refresh-1"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        verify(store, never()).saveUser(any());
+    }
+
     private void authenticateJwt(String subject, String username, String tenantId) {
         Jwt jwt = new Jwt(
                 "token",
