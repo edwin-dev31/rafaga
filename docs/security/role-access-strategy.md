@@ -26,7 +26,7 @@ Keycloak is the single source of truth for these roles. The development realm is
 | `/api/users/me` | Yes | Yes | No |
 | Administrative `/api/users/**` | Yes | No | No |
 | Products, categories, stock, and orders | Yes | Yes | No |
-| `/api/carts/**` | Yes | Yes, only their own carts | No |
+| `/api/carts/**` | Yes | Yes, assisted carts within their own tenant | No |
 | `/api/storefront/**` | Yes | Yes | Yes |
 
 Unlisted routes under `/api/public/**` are denied by default. A new public endpoint requires an explicit rule in `SecurityConfig` and an authorization test.
@@ -50,13 +50,13 @@ The global registration token is a second barrier; it never replaces JWT authori
 
 ### Authenticated carts
 
-`/api/carts/**` is an authenticated backoffice API. A `STORE_MANAGER` may act only on a cart whose `customerId` belongs to that local identity. A `SUPER_ADMIN` may access any cart for support. Guests use only `/api/storefront/**` and a guest session; they never provide a client-controlled `customerId`.
+`/api/carts/**` is an authenticated backoffice API. A `STORE_MANAGER` may consult, modify, and check out assisted carts only for customers (`customers` or `users`) belonging to the same tenant bound to its JWT. A `SUPER_ADMIN` may access any cart for support. Guests use only `/api/storefront/**` and a guest session; they never provide a client-controlled `customerId`.
 
 ## Rules for future changes
 
 - Apply least privilege: deny a new route until an explicit role rule exists.
 - Do not reintroduce local `roles`, `role_permissions`, or `user_roles` tables. Migration `V12` removed them so Keycloak JWTs remain the only authorization source.
-- Never allow `STORE_MANAGER` to cross tenants or access another customer's cart.
+- Never allow `STORE_MANAGER` to cross tenants or access carts belonging to another tenant's customers.
 - Keep the storefront public. A future customer sign-in flow may add `CUSTOMER` rules without making backoffice routes public.
 - Add authorization tests for `SUPER_ADMIN`, `STORE_MANAGER`, and an identity without a backoffice role whenever a protected route is added.
 

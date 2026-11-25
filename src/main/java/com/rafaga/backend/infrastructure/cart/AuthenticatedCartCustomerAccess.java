@@ -27,7 +27,17 @@ public class AuthenticatedCartCustomerAccess implements CartCustomerAccess {
         if (isSuperAdmin(authentication)) {
             return;
         }
-        var user = identities.findCustomerAccess(TenantContext.getCurrentTenantId(), jwt.getSubject())
+        String tenantId = TenantContext.getCurrentTenantId();
+        if (isStoreManager(authentication)) {
+            if (!tenantId.equals(jwt.getClaimAsString("tenant_id"))) {
+                throw new AccessDeniedException("Store manager cannot access carts of another tenant");
+            }
+            if (!identities.belongsToTenant(tenantId, customerId)) {
+                throw new AccessDeniedException("Customer does not belong to current tenant");
+            }
+            return;
+        }
+        var user = identities.findCustomerAccess(tenantId, jwt.getSubject())
                 .orElseThrow(() -> new AccessDeniedException("Authenticated user is not registered"));
         if (customerId.equals(user.userId())) {
             return;
@@ -38,5 +48,10 @@ public class AuthenticatedCartCustomerAccess implements CartCustomerAccess {
     private boolean isSuperAdmin(Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(authority -> "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+    }
+
+    private boolean isStoreManager(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_STORE_MANAGER".equals(authority.getAuthority()));
     }
 }
