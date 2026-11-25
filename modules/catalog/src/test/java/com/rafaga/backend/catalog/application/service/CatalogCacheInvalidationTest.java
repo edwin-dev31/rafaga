@@ -1,6 +1,7 @@
 package com.rafaga.backend.catalog.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.rafaga.backend.catalog.application.command.CreateProduct;
 import com.rafaga.backend.catalog.application.command.UpdateProduct;
+import com.rafaga.backend.catalog.application.exception.CatalogConflictException;
 import com.rafaga.backend.catalog.application.port.CatalogStore;
 import com.rafaga.backend.catalog.domain.model.Category;
 import com.rafaga.backend.catalog.domain.model.Product;
@@ -205,6 +207,35 @@ class CatalogCacheInvalidationTest {
         TenantContext.setCurrentTenantId("tenant-b");
         assertThat(categoryService.getCategoryTree()).hasSize(1);
         verify(store, never()).findCategories("tenant-b");
+    }
+
+    @Test
+    void deleteCategoryValidatesDependenciesAndEvictsOnlyCurrentTenantCache() throws Exception {
+        UUID catId = UUID.randomUUID();
+        Category category = new Category("tenant-a", "Accesorios", "accesorios", null, 0);
+        setField(category, "id", catId);
+        when(store.findCategory(catId, "tenant-a")).thenReturn(Optional.of(category));
+        when(store.findCategories("tenant-a")).thenReturn(List.of(category));
+
+        TenantContext.setCurrentTenantId("tenant-a");
+        categoryService.getCategoryTree();
+        clearInvocations(store);
+
+        when(store.hasChildCategories(catId, "tenant-a")).thenReturn(true);
+        assertThatThrownBy(() -> categoryService.deleteCategory(catId))
+                .isInstanceOf(CatalogConflictException.class);
+
+        when(store.hasChildCategories(catId, "tenant-a")).thenReturn(false);
+        when(store.hasProductsInCategory(catId, "tenant-a")).thenReturn(true);
+        assertThatThrownBy(() -> categoryService.deleteCategory(catId))
+                .isInstanceOf(CatalogConflictException.class);
+
+        when(store.hasProductsInCategory(catId, "tenant-a")).thenReturn(false);
+        categoryService.deleteCategory(catId);
+        verify(store).deleteCategory(category);
+
+        categoryService.getCategoryTree();
+        verify(store, times(1)).findCategories("tenant-a");
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {

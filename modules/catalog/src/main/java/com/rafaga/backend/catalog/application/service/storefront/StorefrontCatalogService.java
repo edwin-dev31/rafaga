@@ -2,11 +2,13 @@ package com.rafaga.backend.catalog.application.service.storefront;
 
 import com.rafaga.backend.catalog.application.exception.CatalogNotFoundException;
 import com.rafaga.backend.catalog.application.port.CatalogStore;
+import com.rafaga.backend.catalog.application.port.ProductSearchFilter;
 import com.rafaga.backend.catalog.application.port.StorefrontProductImageLookup;
 import com.rafaga.backend.catalog.application.service.CategoryNode;
 import com.rafaga.backend.catalog.application.service.CategoryService;
 import com.rafaga.backend.catalog.domain.model.Category;
 import com.rafaga.backend.catalog.domain.model.Product;
+import com.rafaga.backend.catalog.domain.model.ProductStatus;
 import com.rafaga.backend.catalog.domain.model.VariantStatus;
 import com.rafaga.backend.common.application.tenant.TenantContext;
 import java.util.List;
@@ -39,8 +41,35 @@ public class StorefrontCatalogService {
 
     @Transactional(readOnly = true)
     public Page<StorefrontProductResponse> listProducts(Pageable pageable) {
+        return listProducts(null, null, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<StorefrontProductResponse> listProducts(
+            String query,
+            UUID categoryId,
+            String categorySlug,
+            Pageable pageable) {
         String tenantId = TenantContext.getCurrentTenantId();
-        Page<Product> products = store.findActiveProducts(tenantId, pageable);
+        boolean hasQuery = query != null && !query.isBlank();
+        boolean hasCategorySlug = categorySlug != null && !categorySlug.isBlank();
+        Page<Product> products;
+        if (!hasQuery && categoryId == null && !hasCategorySlug) {
+            products = store.findActiveProducts(tenantId, pageable);
+        } else {
+            UUID effectiveCategoryId = categoryId;
+            if (effectiveCategoryId == null && hasCategorySlug) {
+                var resolved = store.findCategoryBySlug(categorySlug.trim(), tenantId);
+                if (resolved.isEmpty()) {
+                    return Page.empty(pageable);
+                }
+                effectiveCategoryId = resolved.get().getId();
+            }
+            products = store.searchProducts(
+                    tenantId,
+                    new ProductSearchFilter(hasQuery ? query.trim() : null, ProductStatus.ACTIVE, effectiveCategoryId),
+                    pageable);
+        }
         Map<UUID, List<StorefrontProductImageLookup.Image>> imagesByProduct =
                 productImageLookup.findByProductIds(products.getContent().stream()
                         .map(Product::getId)
@@ -71,7 +100,7 @@ public class StorefrontCatalogService {
     public StorefrontCategoryResponse getCategoryBySlug(String slug) {
         String tenantId = TenantContext.getCurrentTenantId();
         Category category = store.findCategoryBySlug(slug, tenantId)
-                .orElseThrow(() -> new RuntimeException("Category not found: " + slug));
+                .orElseThrow(() -> new CatalogNotFoundException("Category", slug));
         return toStorefrontCategoryFromEntity(category);
     }
 

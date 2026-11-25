@@ -10,4 +10,5 @@ interface CategoryRepository extends JpaRepository<Category, UUID> {
     Optional<Category> findByIdAndTenantId(UUID id, String tenantId);
     Optional<Category> findBySlugAndTenantId(String slug, String tenantId);
     List<Category> findAllByTenantIdOrderByDisplayOrderAscNameAsc(String tenantId);
+    boolean existsByTenantIdAndParent_Id(String tenantId, UUID parentId);
 }

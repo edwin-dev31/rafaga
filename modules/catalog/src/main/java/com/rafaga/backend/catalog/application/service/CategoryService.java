@@ -57,6 +57,20 @@ public class CategoryService {
         return CategoryView.from(category(categoryId, TenantContext.getCurrentTenantId()));
     }
 
+    @Transactional
+    @CacheEvict(cacheNames = "categories", key = CATEGORY_TREE_CACHE_KEY)
+    public void deleteCategory(UUID categoryId) {
+        String tenantId = TenantContext.getCurrentTenantId();
+        Category category = category(categoryId, tenantId);
+        if (store.hasChildCategories(categoryId, tenantId)) {
+            throw new CatalogConflictException("Category has child categories and cannot be deleted");
+        }
+        if (store.hasProductsInCategory(categoryId, tenantId)) {
+            throw new CatalogConflictException("Category is assigned to products and cannot be deleted");
+        }
+        store.deleteCategory(category);
+    }
+
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = "categories", key = CATEGORY_TREE_CACHE_KEY)
     public List<CategoryNode> getCategoryTree() {
