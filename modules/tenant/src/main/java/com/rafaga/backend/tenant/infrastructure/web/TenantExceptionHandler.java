@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice(assignableTypes = {
         TenantAdminController.class,
         TenantLimitsAdminController.class,
+        TenantFeaturesAdminController.class,
         TenantRoutingAdminController.class,
         R2CorsAdminController.class,
         DeploymentTargetAdminController.class,

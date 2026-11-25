@@ -73,6 +73,32 @@ class FeatureFlagServiceTest {
         verify(events).publishEvent(new FeatureFlagUpdatedEvent("tenant-1", "analytics", true));
     }
 
+    @Test
+    void syncsFeaturesWithCurrentPlanAndPublishesChangedEvents() {
+        TenantRegistry registry = mock(TenantRegistry.class);
+        TenantConfig proWithOverride = new TenantConfig(
+                "tenant-1",
+                "Demo Store",
+                List.of("demo.test"),
+                DeploymentMode.SHARED_DB,
+                null,
+                "pro",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true, "analytics", false));
+        when(registry.findById("tenant-1")).thenReturn(Optional.of(proWithOverride));
+        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        FeatureFlagService service = new FeatureFlagService(
+                registry,
+                events,
+                planId -> Map.of("catalog", true, "analytics", true),
+                null);
+
+        TenantConfig synced = service.syncWithCurrentPlan("tenant-1");
+
+        assertThat(synced.featureFlags()).containsEntry("analytics", true);
+        verify(events).publishEvent(new FeatureFlagUpdatedEvent("tenant-1", "analytics", true));
+    }
+
     private TenantConfig tenant(Map<String, Boolean> flags) {
         return new TenantConfig("tenant-1", "Demo Store", List.of("demo.test"), DeploymentMode.SHARED_DB,
                 null, "starter", TenantStatus.ACTIVE, flags);

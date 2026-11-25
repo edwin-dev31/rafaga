@@ -37,12 +37,13 @@ public class TenantService {
     private final ApplicationEventPublisher eventPublisher;
     private final TenantLimitsService limitsService;
     private final TenantDirectoryService directoryService;
+    private final FeatureFlagService featureFlagService;
 
     public TenantService(
             TenantRegistry tenantRegistry,
             PlanFeatureDefaults planFeatureDefaults,
             ApplicationEventPublisher eventPublisher) {
-        this(tenantRegistry, planFeatureDefaults, eventPublisher, (TenantLimitsService) null, null);
+        this(tenantRegistry, planFeatureDefaults, eventPublisher, (TenantLimitsService) null, null, null);
     }
 
     @Autowired
@@ -51,13 +52,15 @@ public class TenantService {
             PlanFeatureDefaults planFeatureDefaults,
             ApplicationEventPublisher eventPublisher,
             ObjectProvider<TenantLimitsService> limitsServiceProvider,
-            ObjectProvider<TenantDirectoryService> directoryServiceProvider) {
+            ObjectProvider<TenantDirectoryService> directoryServiceProvider,
+            ObjectProvider<FeatureFlagService> featureFlagServiceProvider) {
         this(
                 tenantRegistry,
                 planFeatureDefaults,
                 eventPublisher,
                 limitsServiceProvider.getIfAvailable(),
-                directoryServiceProvider.getIfAvailable());
+                directoryServiceProvider.getIfAvailable(),
+                featureFlagServiceProvider.getIfAvailable());
     }
 
     TenantService(
@@ -65,7 +68,7 @@ public class TenantService {
             PlanFeatureDefaults planFeatureDefaults,
             ApplicationEventPublisher eventPublisher,
             TenantLimitsService limitsService) {
-        this(tenantRegistry, planFeatureDefaults, eventPublisher, limitsService, null);
+        this(tenantRegistry, planFeatureDefaults, eventPublisher, limitsService, null, null);
     }
 
     TenantService(
@@ -74,11 +77,22 @@ public class TenantService {
             ApplicationEventPublisher eventPublisher,
             TenantLimitsService limitsService,
             TenantDirectoryService directoryService) {
+        this(tenantRegistry, planFeatureDefaults, eventPublisher, limitsService, directoryService, null);
+    }
+
+    TenantService(
+            TenantRegistry tenantRegistry,
+            PlanFeatureDefaults planFeatureDefaults,
+            ApplicationEventPublisher eventPublisher,
+            TenantLimitsService limitsService,
+            TenantDirectoryService directoryService,
+            FeatureFlagService featureFlagService) {
         this.tenantRegistry = tenantRegistry;
         this.planFeatureDefaults = planFeatureDefaults;
         this.eventPublisher = eventPublisher;
         this.limitsService = limitsService;
         this.directoryService = directoryService;
+        this.featureFlagService = featureFlagService;
     }
 
     @Transactional
@@ -116,6 +130,13 @@ public class TenantService {
                 && effectiveDatabaseConfig == null) {
             throw new IllegalArgumentException("Dedicated database tenants require a databaseConfigId");
         }
+        Map<String, Boolean> effectiveFeatureFlags = current.featureFlags();
+        if (planChanged) {
+            Map<String, Boolean> planDefaults = planFeatureDefaults.featuresFor(update.planId());
+            if (planDefaults != null && !planDefaults.isEmpty()) {
+                effectiveFeatureFlags = planDefaults;
+            }
+        }
         TenantConfig updated = new TenantConfig(
                 current.tenantId(),
                 update.name(),
@@ -124,10 +145,17 @@ public class TenantService {
                 effectiveDatabaseConfig,
                 update.planId(),
                 current.status(),
-                current.featureFlags());
+                effectiveFeatureFlags);
         tenantRegistry.update(updated);
-        if (planChanged && limitsService != null) {
-            limitsService.syncWithPlan(tenantId, update.planId());
+        if (planChanged) {
+            if (limitsService != null) {
+                limitsService.syncWithPlan(tenantId, update.planId());
+            }
+            if (featureFlagService != null) {
+                java.util.Set<String> affectedFeatures = new java.util.LinkedHashSet<>(current.featureFlags().keySet());
+                affectedFeatures.addAll(effectiveFeatureFlags.keySet());
+                featureFlagService.evictTenantFeatureCache(tenantId, affectedFeatures);
+            }
         }
         eventPublisher.publishEvent(new TenantUpdatedEvent(tenantId, changedFields(current, updated)));
         return updated;

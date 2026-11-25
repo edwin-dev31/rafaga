@@ -109,6 +109,35 @@ class TenantServiceTest {
                 "name", "domains", "deploymentMode", "databaseConfigId", "planId");
     }
 
+    @Test
+    void syncsPlanFeatureFlagsAndEvictsCacheWhenPlanChangesOnUpdate() {
+        TenantRegistry registry = mock(TenantRegistry.class);
+        TenantConfig current = new TenantConfig(
+                "tenant-1",
+                "Demo Store",
+                List.of("demo.test"),
+                DeploymentMode.SHARED_DB,
+                null,
+                "starter",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true, "orders", true, "analytics", false));
+        when(registry.findById("tenant-1")).thenReturn(Optional.of(current));
+        PlanFeatureDefaults defaults = mock(PlanFeatureDefaults.class);
+        when(defaults.featuresFor("pro"))
+                .thenReturn(Map.of("catalog", true, "orders", true, "analytics", true));
+        FeatureFlagService featureFlags = mock(FeatureFlagService.class);
+        TenantService service = new TenantService(
+                registry, defaults, mock(ApplicationEventPublisher.class), (TenantLimitsService) null, null, featureFlags);
+
+        TenantConfig updated = service.updateTenant(
+                "tenant-1",
+                new TenantUpdate("Demo Store", List.of("demo.test"), DeploymentMode.SHARED_DB, null, "pro"));
+
+        assertThat(updated.featureFlags()).containsEntry("analytics", true);
+        verify(registry).update(updated);
+        verify(featureFlags).evictTenantFeatureCache(any(), any());
+    }
+
     private TenantRegistration registrationFor(DeploymentMode deploymentMode) {
         String databaseConfigId = deploymentMode == DeploymentMode.DEDICATED_DB
                 ? "secrets/dedicated-database"

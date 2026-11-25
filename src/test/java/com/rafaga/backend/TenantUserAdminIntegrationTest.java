@@ -21,11 +21,14 @@ class TenantUserAdminIntegrationTest extends TenantIsolationTestBase {
     void listsTenantUsersWithAbsentEmptyWhitespaceAndTextQueryWhileIsolatingTenants() throws Exception {
         String tenantId = "users-" + UUID.randomUUID().toString().substring(0, 16);
         String tenantHost = tenantId + ".isolation.test";
+        String otherTenantId = "other-" + UUID.randomUUID().toString().substring(0, 16);
+        String otherTenantHost = otherTenantId + ".isolation.test";
         tenants.register(isolationTenant(tenantId, tenantHost));
+        tenants.register(isolationTenant(otherTenantId, otherTenantHost));
 
         seedLocalUser(tenantId, tenantHost, "kc-ana-" + UUID.randomUUID(), "ana.gomez", "ana@tienda.test");
         seedLocalUser(tenantId, tenantHost, "kc-luis-" + UUID.randomUUID(), "luis.perez", "luis@tienda.test");
-        seedLocalUser(TENANT_B, HOST_B, "kc-other-" + UUID.randomUUID(), "ana.otra", "ana.otra@otra.test");
+        seedLocalUser(otherTenantId, otherTenantHost, "kc-other-" + UUID.randomUUID(), "ana.otra", "ana.otra@otra.test");
 
         // 1. Absent q (previously failed on PostgreSQL with function lower(bytea) does not exist)
         mockMvc.perform(get("/api/admin/tenants/{tenantId}/users", tenantId)
