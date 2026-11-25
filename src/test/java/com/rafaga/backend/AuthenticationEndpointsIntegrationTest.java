@@ -298,6 +298,87 @@ class AuthenticationEndpointsIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void superAdminCanListAndUpdateTenantUserRolesInKeycloak() throws Exception {
+        String rolesTenantId = "roles-" + UUID.randomUUID().toString().substring(0, 16);
+        String rolesTenantDomain = rolesTenantId + ".rafaga.test";
+        tenantRegistry.register(new TenantConfig(
+                rolesTenantId,
+                "Roles Store",
+                List.of(rolesTenantDomain),
+                DeploymentMode.SHARED_DB,
+                null,
+                "pro",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true)));
+        tenantLimitsService.updateLimits(rolesTenantId, "pro", null, null, null, 100, null);
+
+        String adminToken = accessToken();
+        String username = "role-user-" + UUID.randomUUID();
+        String password = "RolePassword123!";
+
+        MvcResult created = mockMvc.perform(post("/api/admin/tenants/{tenantId}/users", rolesTenantId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "firstName", "Role",
+                                "lastName", "Target",
+                                "email", username + "@example.test",
+                                "password", password,
+                                "role", "CUSTOMER"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.roles[0]").value("CUSTOMER"))
+                .andReturn();
+        String userId = objectMapper.readTree(created.getResponse().getContentAsString()).path("id").asText();
+
+        mockMvc.perform(get("/api/admin/tenants/{tenantId}/users", rolesTenantId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].roles[0]").value("CUSTOMER"));
+
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/roles", rolesTenantId, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roles\":[\"UNKNOWN_ROLE\"]}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/roles", rolesTenantId, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roles\":[\"STORE_MANAGER\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles[0]").value("STORE_MANAGER"));
+
+        mockMvc.perform(get("/api/admin/tenants/{tenantId}/users", rolesTenantId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].roles[0]").value("STORE_MANAGER"));
+
+        MvcResult loginRes = mockMvc.perform(post("/api/public/auth/login")
+                        .with(request -> {
+                            request.setServerName(rolesTenantDomain);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", password))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String managerToken = objectMapper.readTree(loginRes.getResponse().getContentAsString())
+                .path("accessToken").asText();
+
+        mockMvc.perform(get("/api/users/me")
+                        .with(request -> {
+                            request.setServerName(rolesTenantDomain);
+                            return request;
+                        })
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles[0]").value("STORE_MANAGER"));
+    }
+
     private String accessToken() throws Exception {
         JsonNode response = objectMapper.readTree(
                 login("platform-admin", "rafaga_dev_password").getResponse().getContentAsString());

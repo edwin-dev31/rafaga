@@ -6,6 +6,7 @@ import com.rafaga.backend.identity.domain.model.UserStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,9 +60,10 @@ public class UserController {
             Boolean temporary) {
     }
 
-    public record UserResponse(UUID id, String username, String email, UserStatus status) {
+    public record UserResponse(UUID id, String username, String email, UserStatus status, List<String> roles) {
         static UserResponse from(UserProfile profile) {
-            return new UserResponse(profile.id(), profile.username(), profile.email(), profile.status());
+            return new UserResponse(
+                    profile.id(), profile.username(), profile.email(), profile.status(), profile.roles());
         }
     }
 }

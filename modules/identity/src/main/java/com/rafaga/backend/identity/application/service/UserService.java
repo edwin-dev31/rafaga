@@ -23,7 +23,11 @@ import com.rafaga.backend.identity.application.security.RegistrationTokenValidat
 import com.rafaga.backend.identity.domain.model.User;
 import com.rafaga.backend.identity.domain.model.UserStatus;
 import java.time.Clock;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
@@ -196,7 +200,18 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public Page<UserProfile> listTenantUsers(String tenantId, String query, UserStatus status, Pageable pageable) {
-        return identityStore.searchUsers(tenantId, query, status, pageable).map(UserProfile::from);
+        Page<User> users = identityStore.searchUsers(tenantId, query, status, pageable);
+        List<String> keycloakIds = users.getContent().stream()
+                .map(User::getKeycloakId)
+                .toList();
+        Map<String, List<String>> rolesByKeycloakId = keycloakIds.isEmpty()
+                ? Map.of()
+                : authenticationPort.getUserRolesBatch(keycloakIds);
+        return users.map(user -> UserProfile.from(
+                user,
+                rolesByKeycloakId != null
+                        ? rolesByKeycloakId.getOrDefault(user.getKeycloakId(), List.of())
+                        : List.of()));
     }
 
     @Transactional(readOnly = true)
@@ -216,7 +231,10 @@ public class UserService {
             });
         }
         try {
-            UserProfile user = synchronizeProfile(tenantId, authenticationPort.registerUser(tenantId, registration, role));
+            UserProfile user = synchronizeProfile(
+                    tenantId,
+                    authenticationPort.registerUser(tenantId, registration, role),
+                    List.of(role));
             log.info("event=admin.user_register outcome=SUCCESS tenantId={} role={}", tenantId, role);
             return user;
         } catch (UserAlreadyExistsException exception) {
@@ -239,9 +257,37 @@ public class UserService {
             user.deactivate();
         }
         User saved = identityStore.saveUser(user);
+        List<String> roles = safeRoles(authenticationPort.getUserRoles(saved.getKeycloakId()));
         log.info("event=admin.user_status outcome=SUCCESS tenantId={} userId={} status={}",
                 tenantId, userId, targetStatus);
-        return UserProfile.from(saved);
+        return UserProfile.from(saved, roles);
+    }
+
+    @Transactional
+    public UserProfile updateTenantUserRoles(String tenantId, UUID userId, List<String> requestedRoles) {
+        List<String> normalizedRoles = normalizeRoleList(requestedRoles);
+        User user = findUser(tenantId, userId);
+        List<String> currentRoles = safeRoles(authenticationPort.getUserRoles(user.getKeycloakId()));
+        boolean wasAdmin = isAdminRole(currentRoles);
+        boolean becomesAdmin = isAdminRole(normalizedRoles);
+        if (user.getStatus() == UserStatus.ACTIVE && !wasAdmin && becomesAdmin && limitsQuery != null) {
+            limitsQuery.findLimits(tenantId).ifPresent(limits -> {
+                long currentUsers = identityStore.countUsers(tenantId);
+                if (currentUsers >= limits.maxAdminUsers()) {
+                    throw new TenantLimitExceededException("adminUsers", limits.maxAdminUsers(), currentUsers);
+                }
+            });
+        }
+        try {
+            List<String> updatedRoles = safeRoles(
+                    authenticationPort.replaceUserRoles(user.getKeycloakId(), normalizedRoles));
+            log.info("event=admin.user_roles outcome=SUCCESS tenantId={} userId={} roles={}",
+                    tenantId, userId, updatedRoles);
+            return UserProfile.from(user, updatedRoles);
+        } catch (IdentityProviderUnavailableException exception) {
+            log.warn("event=admin.user_roles outcome=IDP_UNAVAILABLE tenantId={} userId={}", tenantId, userId);
+            throw exception;
+        }
     }
 
     @Transactional
@@ -274,17 +320,21 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public UserProfile getUserById(UUID userId) {
-        return UserProfile.from(findUser(userId));
+        User user = findUser(userId);
+        return UserProfile.from(user, safeRoles(authenticationPort.getUserRoles(user.getKeycloakId())));
     }
 
     @Transactional
     public UserProfile getCurrentUser() {
         Jwt jwt = currentJwt();
-        return synchronizeProfile(new IdentityProfile(
-                jwt.getSubject(),
-                jwt.getClaimAsString("preferred_username"),
-                jwt.getClaimAsString("email"),
-                jwt.getClaimAsString("tenant_id")));
+        return synchronizeProfile(
+                currentTenantId(),
+                new IdentityProfile(
+                        jwt.getSubject(),
+                        jwt.getClaimAsString("preferred_username"),
+                        jwt.getClaimAsString("email"),
+                        jwt.getClaimAsString("tenant_id")),
+                rolesFromJwt(jwt));
     }
 
     @Transactional
@@ -353,10 +403,14 @@ public class UserService {
     }
 
     private UserProfile synchronizeProfile(IdentityProfile profile) {
-        return synchronizeProfile(currentTenantId(), profile);
+        return synchronizeProfile(currentTenantId(), profile, List.of());
     }
 
     private UserProfile synchronizeProfile(String tenantId, IdentityProfile profile) {
+        return synchronizeProfile(tenantId, profile, List.of());
+    }
+
+    private UserProfile synchronizeProfile(String tenantId, IdentityProfile profile, List<String> roles) {
         String profileTenantId = profile.tenantId();
         if (profileTenantId != null && !tenantId.equals(profileTenantId)) {
             throw new CrossTenantAccessException();
@@ -367,7 +421,7 @@ public class UserService {
         } else {
             user.updateProfile(profile.username(), profile.email(), clock.instant());
         }
-        return UserProfile.from(identityStore.saveUser(user));
+        return UserProfile.from(identityStore.saveUser(user), safeRoles(roles));
     }
 
     private void synchronizeProfileInTransaction(String tenantId, IdentityProfile profile) {
@@ -407,11 +461,58 @@ public class UserService {
         if (requestedRole == null || requestedRole.isBlank()) {
             return "STORE_MANAGER";
         }
+        return normalizeExplicitRole(requestedRole);
+    }
+
+    private String normalizeExplicitRole(String requestedRole) {
+        if (requestedRole == null || requestedRole.isBlank()) {
+            throw new IllegalArgumentException("Role must not be blank");
+        }
         String normalized = requestedRole.trim().toUpperCase(Locale.ROOT);
         if (!ALLOWED_ROLES.contains(normalized)) {
             throw new IllegalArgumentException("Unsupported role: " + requestedRole);
         }
         return normalized;
+    }
+
+    private List<String> normalizeRoleList(List<String> requestedRoles) {
+        if (requestedRoles == null || requestedRoles.isEmpty()) {
+            throw new IllegalArgumentException("At least one role must be provided");
+        }
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String role : requestedRoles) {
+            normalized.add(normalizeExplicitRole(role));
+        }
+        return List.copyOf(normalized);
+    }
+
+    private boolean isAdminRole(List<String> roles) {
+        return roles.stream().anyMatch(role -> "SUPER_ADMIN".equals(role) || "STORE_MANAGER".equals(role));
+    }
+
+    private List<String> safeRoles(List<String> roles) {
+        return roles == null ? List.of() : List.copyOf(roles);
+    }
+
+    private List<String> rolesFromJwt(Jwt jwt) {
+        Set<String> roles = new LinkedHashSet<>();
+        collectManagedRoles(jwt.getClaim("roles"), roles);
+        Object realmAccess = jwt.getClaim("realm_access");
+        if (realmAccess instanceof Map<?, ?> claims) {
+            collectManagedRoles(claims.get("roles"), roles);
+        }
+        return roles.stream().sorted().toList();
+    }
+
+    private void collectManagedRoles(Object claim, Set<String> target) {
+        if (!(claim instanceof Collection<?> values)) {
+            return;
+        }
+        for (Object value : values) {
+            if (value instanceof String role && ALLOWED_ROLES.contains(role)) {
+                target.add(role);
+            }
+        }
     }
 
     private User findUser(UUID userId) {

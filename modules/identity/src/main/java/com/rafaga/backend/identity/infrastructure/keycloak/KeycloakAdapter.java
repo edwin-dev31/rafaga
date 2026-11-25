@@ -12,13 +12,18 @@ import com.rafaga.backend.identity.application.exception.InvalidCredentialsExcep
 import com.rafaga.backend.identity.application.exception.PasswordPolicyViolationException;
 import com.rafaga.backend.identity.application.exception.UserAlreadyExistsException;
 import java.net.URI;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -35,6 +40,7 @@ import org.springframework.web.client.RestClient;
 @Component
 public class KeycloakAdapter implements AuthenticationPort {
     private static final Logger log = LoggerFactory.getLogger(KeycloakAdapter.class);
+    private static final Set<String> MANAGED_ROLES = Set.of("SUPER_ADMIN", "STORE_MANAGER", "CUSTOMER");
     private final KeycloakProperties properties;
     private final ObjectProvider<JwtDecoder> jwtDecoderProvider;
     private final RestClient restClient;
@@ -251,6 +257,125 @@ public class KeycloakAdapter implements AuthenticationPort {
         } catch (HttpClientErrorException exception) {
             throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
         }
+    }
+
+    @Override
+    public List<String> getUserRoles(String keycloakId) {
+        return getUserRolesBatch(List.of(keycloakId)).getOrDefault(keycloakId, List.of());
+    }
+
+    @Override
+    public Map<String, List<String>> getUserRolesBatch(Collection<String> keycloakIds) {
+        if (keycloakIds == null || keycloakIds.isEmpty()) {
+            return Map.of();
+        }
+        String adminAccessToken;
+        try {
+            adminAccessToken = requestAdminAccessToken();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.roles_lookup outcome=IDP_UNAVAILABLE reason=admin_token_fetch_failed");
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        }
+        Map<String, List<String>> rolesByUser = new LinkedHashMap<>();
+        for (String keycloakId : keycloakIds) {
+            if (keycloakId == null || keycloakId.isBlank() || rolesByUser.containsKey(keycloakId)) {
+                continue;
+            }
+            rolesByUser.put(keycloakId, fetchManagedRolesOrEmpty(adminAccessToken, keycloakId));
+        }
+        return rolesByUser;
+    }
+
+    @Override
+    public List<String> replaceUserRoles(String keycloakId, List<String> targetRoles) {
+        String adminAccessToken;
+        try {
+            adminAccessToken = requestAdminAccessToken();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.roles_update outcome=IDP_UNAVAILABLE reason=admin_token_fetch_failed");
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        }
+        try {
+            List<KeycloakRole> currentManaged = fetchAssignedManagedRoleObjects(adminAccessToken, keycloakId);
+            Set<String> targetSet = Set.copyOf(targetRoles);
+            Set<String> currentNames = currentManaged.stream().map(KeycloakRole::name).collect(java.util.stream.Collectors.toSet());
+
+            List<KeycloakRole> toRemove = currentManaged.stream()
+                    .filter(role -> !targetSet.contains(role.name()))
+                    .toList();
+            if (!toRemove.isEmpty()) {
+                restClient.method(HttpMethod.DELETE)
+                        .uri(adminRoleUri(keycloakId))
+                        .headers(headers -> headers.setBearerAuth(adminAccessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(toRemove)
+                        .retrieve()
+                        .toBodilessEntity();
+            }
+
+            List<KeycloakRole> toAdd = targetRoles.stream()
+                    .filter(roleName -> !currentNames.contains(roleName))
+                    .map(roleName -> fetchRealmRole(adminAccessToken, roleName))
+                    .toList();
+            if (!toAdd.isEmpty()) {
+                restClient.post()
+                        .uri(adminRoleUri(keycloakId))
+                        .headers(headers -> headers.setBearerAuth(adminAccessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(toAdd)
+                        .retrieve()
+                        .toBodilessEntity();
+            }
+            log.info("event=keycloak.roles_update outcome=SUCCESS roles={}", targetRoles);
+            return List.copyOf(targetRoles);
+        } catch (HttpClientErrorException.NotFound exception) {
+            throw new IdentityResourceNotFoundException("User", keycloakId);
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.roles_update outcome=IDP_UNAVAILABLE reason=role_update_failed");
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        } catch (HttpClientErrorException exception) {
+            throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
+        }
+    }
+
+    private List<String> fetchManagedRolesOrEmpty(String adminAccessToken, String keycloakId) {
+        try {
+            return fetchAssignedManagedRoleObjects(adminAccessToken, keycloakId).stream()
+                    .map(KeycloakRole::name)
+                    .sorted()
+                    .toList();
+        } catch (HttpClientErrorException.NotFound exception) {
+            return List.of();
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("event=keycloak.roles_lookup outcome=IDP_UNAVAILABLE reason=role_fetch_failed");
+            throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
+        } catch (HttpClientErrorException exception) {
+            throw new IllegalStateException("Keycloak returned an error: " + exception.getStatusCode(), exception);
+        }
+    }
+
+    private List<KeycloakRole> fetchAssignedManagedRoleObjects(String adminAccessToken, String keycloakId) {
+        KeycloakRole[] assigned = restClient.get()
+                .uri(adminRoleUri(keycloakId))
+                .headers(headers -> headers.setBearerAuth(adminAccessToken))
+                .retrieve()
+                .body(KeycloakRole[].class);
+        if (assigned == null || assigned.length == 0) {
+            return List.of();
+        }
+        return Arrays.stream(assigned)
+                .filter(role -> role != null && role.name() != null && MANAGED_ROLES.contains(role.name()))
+                .toList();
+    }
+
+    private KeycloakRole fetchRealmRole(String adminAccessToken, String roleName) {
+        return Objects.requireNonNull(
+                restClient.get()
+                        .uri(realmRoleUri(roleName))
+                        .headers(headers -> headers.setBearerAuth(adminAccessToken))
+                        .retrieve()
+                        .body(KeycloakRole.class),
+                "Keycloak returned an empty role response");
     }
 
     private AuthenticationTokens requestUserTokens(String username, String password) {

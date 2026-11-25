@@ -10,7 +10,9 @@ import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.data.domain.Page;
@@ -96,6 +98,15 @@ public class TenantUserAdminController {
         });
     }
 
+    @PutMapping("/{userId}/roles")
+    public UserResponse updateRoles(
+            @PathVariable("tenantId") String tenantId,
+            @PathVariable("userId") UUID userId,
+            @Valid @RequestBody UpdateTenantUserRolesRequest request) {
+        return inTenant(tenantId, () -> UserResponse.from(
+                userService.updateTenantUserRoles(tenantId, userId, request.roles())));
+    }
+
     private <T> T inTenant(String tenantId, Supplier<T> action) {
         tenantRegistry.findById(tenantId)
                 .orElseThrow(() -> new IdentityResourceNotFoundException("Tenant", tenantId));
@@ -126,9 +137,14 @@ public class TenantUserAdminController {
             Boolean temporary) {
     }
 
-    public record UserResponse(UUID id, String username, String email, UserStatus status) {
+    public record UpdateTenantUserRolesRequest(
+            @NotEmpty List<@NotBlank String> roles) {
+    }
+
+    public record UserResponse(UUID id, String username, String email, UserStatus status, List<String> roles) {
         static UserResponse from(UserProfile profile) {
-            return new UserResponse(profile.id(), profile.username(), profile.email(), profile.status());
+            return new UserResponse(
+                    profile.id(), profile.username(), profile.email(), profile.status(), profile.roles());
         }
     }
 }

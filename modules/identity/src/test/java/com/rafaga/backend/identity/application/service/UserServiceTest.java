@@ -276,6 +276,28 @@ class UserServiceTest {
         verify(authentication).setUserEnabled("kc-55", false);
     }
 
+    @Test
+    void listsAndUpdatesTenantUserRolesWithValidationAndAdminQuotaEnforcement() {
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        IdentityStore store = mock(IdentityStore.class);
+        UUID userId = UUID.randomUUID();
+        User user = new User(TENANT_ID, "kc-88", "customer1", "customer1@tienda.test", Instant.now());
+        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
+        when(authentication.getUserRoles("kc-88")).thenReturn(List.of("CUSTOMER"));
+        when(authentication.replaceUserRoles("kc-88", List.of("STORE_MANAGER"))).thenReturn(List.of("STORE_MANAGER"));
+
+        UserService service = service(authentication, store);
+        UserProfile updated = service.updateTenantUserRoles(TENANT_ID, userId, List.of("store_manager"));
+        assertThat(updated.roles()).containsExactly("STORE_MANAGER");
+
+        assertThatThrownBy(() -> service.updateTenantUserRoles(TENANT_ID, userId, List.of("INVALID_ROLE")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported role");
+
+        assertThatThrownBy(() -> service.updateTenantUserRoles(TENANT_ID, userId, List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     private void authenticateJwt(String subject, String username, String tenantId) {
         Jwt jwt = new Jwt(
                 "token",

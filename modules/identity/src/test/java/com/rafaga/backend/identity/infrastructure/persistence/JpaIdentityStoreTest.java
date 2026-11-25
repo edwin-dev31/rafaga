@@ -105,4 +105,14 @@ class JpaIdentityStoreTest {
         verify(cb).like(lowerUsername, "%ana%");
         verify(cb).like(lowerEmail, "%ana%");
     }
+
+    @Test
+    void countsOnlyActiveUsersForTenantQuota() {
+        UserJpaRepository repository = mock(UserJpaRepository.class);
+        when(repository.countByTenantIdAndStatus("tenant-1", UserStatus.ACTIVE)).thenReturn(3L);
+        JpaIdentityStore store = new JpaIdentityStore(repository);
+
+        assertThat(store.countUsers("tenant-1")).isEqualTo(3L);
+        verify(repository).countByTenantIdAndStatus("tenant-1", UserStatus.ACTIVE);
+    }
 }

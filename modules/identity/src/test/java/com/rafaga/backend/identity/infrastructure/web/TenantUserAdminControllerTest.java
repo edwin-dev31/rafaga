@@ -162,6 +162,39 @@ class TenantUserAdminControllerTest {
     }
 
     @Test
+    void returnsRolesInUserListAndUpdatesUserRolesWithValidation() throws Exception {
+        TenantRegistry registry = activeRegistry();
+        UserService service = mock(UserService.class);
+        UUID userId = UUID.randomUUID();
+        when(service.listTenantUsers(eq(TENANT_ID), eq(null), eq(null), any()))
+                .thenReturn(new PageImpl<>(
+                        List.of(new UserProfile(
+                                userId, "ana.store", "ana@tienda.test", UserStatus.ACTIVE, List.of("STORE_MANAGER"))),
+                        PageRequest.of(0, 20),
+                        1));
+        when(service.updateTenantUserRoles(TENANT_ID, userId, List.of("STORE_MANAGER")))
+                .thenReturn(new UserProfile(
+                        userId, "ana.store", "ana@tienda.test", UserStatus.ACTIVE, List.of("STORE_MANAGER")));
+
+        MockMvc mvc = mockMvc(registry, service);
+        mvc.perform(get("/api/admin/tenants/{tenantId}/users", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].roles[0]").value("STORE_MANAGER"));
+
+        mvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/roles", TENANT_ID, userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roles\":[\"STORE_MANAGER\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles[0]").value("STORE_MANAGER"));
+
+        mvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/roles", TENANT_ID, userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roles\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
     void returnsNotFoundForUnknownTenantAndConflictOnPlanLimitExceeded() throws Exception {
         TenantRegistry registry = activeRegistry();
         when(registry.findById("missing")).thenReturn(Optional.empty());

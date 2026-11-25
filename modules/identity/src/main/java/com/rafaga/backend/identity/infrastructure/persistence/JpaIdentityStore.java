@@ -39,7 +39,7 @@ class JpaIdentityStore implements IdentityStore {
 
     @Override
     public long countUsers(String tenantId) {
-        return userRepository.countByTenantId(tenantId);
+        return userRepository.countByTenantIdAndStatus(tenantId, UserStatus.ACTIVE);
     }
 
     @Override
