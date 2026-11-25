@@ -1,11 +1,14 @@
 package com.rafaga.backend.tenant.infrastructure.persistence;
 
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.application.port.TenantSearchFilter;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
 import com.rafaga.backend.tenant.infrastructure.cache.TenantConfigCache;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -32,6 +35,11 @@ class JpaTenantRegistry implements TenantRegistry {
     @Override
     public List<TenantConfig> findAll() {
         return store.findAll();
+    }
+
+    @Override
+    public Page<TenantConfig> search(TenantSearchFilter filter, Pageable pageable) {
+        return store.search(filter, pageable);
     }
 
     @Override

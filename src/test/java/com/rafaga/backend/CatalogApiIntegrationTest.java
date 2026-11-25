@@ -166,6 +166,79 @@ class CatalogApiIntegrationTest extends TenantIsolationTestBase {
                 .andExpect(jsonPath("$.content[0].name").value("Beta"));
     }
 
+    @Test
+    void deletesUnusedCategoriesFiltersStorefrontProductsAndReturnsVariantAvailabilitySafely() throws Exception {
+        String tenantId = "sf-" + UUID.randomUUID().toString().substring(0, 16);
+        String host = tenantId + ".catalog.test";
+        tenants.register(tenant(tenantId, host));
+
+        String parentSlug = "ropa-" + UUID.randomUUID();
+        String childSlug = "camisas-" + UUID.randomUUID();
+        String unusedSlug = "libre-" + UUID.randomUUID();
+        String parentId = createCategory(tenantId, host, "Ropa", parentSlug, null);
+        String childId = createCategory(tenantId, host, "Camisas", childSlug, parentId);
+        String unusedId = createCategory(tenantId, host, "Libre", unusedSlug, null);
+
+        // Parent category with child cannot be deleted
+        mvc.perform(delete("/api/categories/{categoryId}", parentId).header("Host", host)
+                        .with(jwtFor(tenantId)))
+                .andExpect(status().isConflict());
+
+        // Unused category can be deleted
+        mvc.perform(delete("/api/categories/{categoryId}", unusedId).header("Host", host)
+                        .with(jwtFor(tenantId)))
+                .andExpect(status().isNoContent());
+
+        // Create active product in child category
+        MvcResult created = mvc.perform(post("/api/products").header("Host", host).with(jwtFor(tenantId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"SF-" + UUID.randomUUID() + "\",\"name\":\"Camisa Lino\",\"basePrice\":50.00,"
+                                + "\"categoryIds\":[\"" + childId + "\"]}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String productId = mapper.readTree(created.getResponse().getContentAsString()).path("id").asText();
+
+        mvc.perform(put("/api/products/{productId}", productId).header("Host", host).with(jwtFor(tenantId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Camisa Lino\",\"basePrice\":50.00,\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+
+        // Category assigned to product cannot be deleted
+        mvc.perform(delete("/api/categories/{categoryId}", childId).header("Host", host)
+                        .with(jwtFor(tenantId)))
+                .andExpect(status().isConflict());
+
+        // Add a brand-new variant with no stock_levels row yet -> availability must return 200 with 0 / false
+        MvcResult variantRes = mvc.perform(post("/api/products/{productId}/variants", productId)
+                        .header("Host", host).with(jwtFor(tenantId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"SF-VAR-" + UUID.randomUUID()
+                                + "\",\"name\":\"Talla L\",\"priceAdjustment\":5.00}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String variantId = mapper.readTree(variantRes.getResponse().getContentAsString())
+                .path("variants").get(0).path("id").asText();
+
+        mvc.perform(get("/api/storefront/products/{productId}/availability", productId).header("Host", host))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.variants[0].variantId").value(variantId))
+                .andExpect(jsonPath("$.variants[0].availableQuantity").value(0))
+                .andExpect(jsonPath("$.variants[0].inStock").value(false));
+
+        // Storefront product search by q and categorySlug
+        mvc.perform(get("/api/storefront/products").header("Host", host)
+                        .param("q", "lino")
+                        .param("categorySlug", childSlug))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(productId));
+
+        mvc.perform(get("/api/storefront/products").header("Host", host)
+                        .param("categorySlug", "nonexistent-slug"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
     private String createCategory(String tenantId, String host, String name,
             String slug, String parentId) throws Exception {
         String body = "{\"name\":\"" + name + "\",\"slug\":\"" + slug

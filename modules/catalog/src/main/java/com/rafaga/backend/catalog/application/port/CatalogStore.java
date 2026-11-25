@@ -25,6 +25,15 @@ public interface CatalogStore {
     Optional<Category> findCategory(UUID id, String tenantId);
     Optional<Category> findCategoryBySlug(String slug, String tenantId);
     List<Category> findCategories(String tenantId);
+    default boolean hasChildCategories(UUID categoryId, String tenantId) {
+        return false;
+    }
+    default boolean hasProductsInCategory(UUID categoryId, String tenantId) {
+        return false;
+    }
+    default void deleteCategory(Category category) {
+        throw new UnsupportedOperationException("Category deletion is not implemented");
+    }
 
     /** Returns only ACTIVE products for the storefront. */
     Page<Product> findActiveProducts(String tenantId, Pageable pageable);

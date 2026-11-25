@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.rafaga.backend.catalog.application.port.CatalogStore;
+import com.rafaga.backend.catalog.application.port.ProductSearchFilter;
 import com.rafaga.backend.catalog.application.port.StorefrontProductImageLookup;
 import com.rafaga.backend.catalog.application.service.CategoryService;
+import com.rafaga.backend.catalog.domain.model.Category;
 import com.rafaga.backend.catalog.domain.model.Product;
 import com.rafaga.backend.catalog.domain.model.ProductStatus;
 import com.rafaga.backend.common.application.tenant.TenantContext;
@@ -13,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +67,33 @@ class StorefrontCatalogServiceTest {
         assertThat(response.images().getFirst().url())
                 .isEqualTo("https://media.example/primary.webp");
         assertThat(response.images().get(1).primary()).isFalse();
+    }
+
+    @Test
+    void listProducts_filtersActiveProductsByQueryAndCategorySlug() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        Product product = activeProduct();
+        UUID categoryId = UUID.randomUUID();
+        Category category = new Category(TENANT_ID, "Libros", "libros", null, 0);
+        ReflectionTestUtils.setField(category, "id", categoryId);
+        StorefrontCatalogService service = new StorefrontCatalogService(
+                store, categoryService, productImageLookup);
+
+        when(store.findCategoryBySlug("libros", TENANT_ID)).thenReturn(Optional.of(category));
+        when(store.findCategoryBySlug("missing", TENANT_ID)).thenReturn(Optional.empty());
+        when(store.searchProducts(
+                TENANT_ID,
+                new ProductSearchFilter("book", ProductStatus.ACTIVE, categoryId),
+                PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(product)));
+        when(productImageLookup.findByProductIds(List.of(product.getId()))).thenReturn(Map.of());
+
+        var matched = service.listProducts("  book ", null, "libros", PageRequest.of(0, 20));
+        assertThat(matched.getContent()).hasSize(1);
+        assertThat(matched.getContent().getFirst().name()).isEqualTo("Public book");
+
+        var empty = service.listProducts("book", null, "missing", PageRequest.of(0, 20));
+        assertThat(empty.getContent()).isEmpty();
     }
 
     private Product activeProduct() {

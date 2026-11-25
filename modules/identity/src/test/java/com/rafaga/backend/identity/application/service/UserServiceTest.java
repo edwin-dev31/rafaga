@@ -215,6 +215,24 @@ class UserServiceTest {
     }
 
     @Test
+    void resetsTenantUserPasswordForSelectedTenantAndRejectsCrossTenantTarget() {
+        TenantContext.clear();
+        IdentityStore store = mock(IdentityStore.class);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        UUID userId = UUID.randomUUID();
+        User user = new User(TENANT_ID, "keycloak-77", "manager", "manager@tienda.test", Instant.now());
+        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
+        when(store.findUserById("tenant-b", userId)).thenReturn(Optional.empty());
+        UserService service = service(authentication, store);
+
+        service.resetTenantUserPassword(TENANT_ID, userId, "AdminResetPass123!", true);
+        verify(authentication).updatePassword("keycloak-77", "AdminResetPass123!", true);
+
+        assertThatThrownBy(() -> service.resetTenantUserPassword("tenant-b", userId, "AdminResetPass123!", false))
+                .isInstanceOf(IdentityResourceNotFoundException.class);
+    }
+
+    @Test
     void authenticatesFromDashboardWithoutHostTenantByResolvingJwtTenantClaim() {
         TenantContext.clear();
         AuthenticationPort authentication = mock(AuthenticationPort.class);
@@ -256,6 +274,53 @@ class UserServiceTest {
 
         assertThat(disabled.status()).isEqualTo(UserStatus.DISABLED);
         verify(authentication).setUserEnabled("kc-55", false);
+    }
+
+    @Test
+    void listsAndUpdatesTenantUserRolesWithValidationAndAdminQuotaEnforcement() {
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        IdentityStore store = mock(IdentityStore.class);
+        UUID userId = UUID.randomUUID();
+        User user = new User(TENANT_ID, "kc-88", "customer1", "customer1@tienda.test", Instant.now());
+        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
+        when(authentication.getUserRoles("kc-88")).thenReturn(List.of("CUSTOMER"));
+        when(authentication.replaceUserRoles("kc-88", List.of("STORE_MANAGER"))).thenReturn(List.of("STORE_MANAGER"));
+
+        UserService service = service(authentication, store);
+        UserProfile updated = service.updateTenantUserRoles(TENANT_ID, userId, List.of("store_manager"));
+        assertThat(updated.roles()).containsExactly("STORE_MANAGER");
+
+        assertThatThrownBy(() -> service.updateTenantUserRoles(TENANT_ID, userId, List.of("INVALID_ROLE")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported role");
+
+        assertThatThrownBy(() -> service.updateTenantUserRoles(TENANT_ID, userId, List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsLoginAndRefreshWhenLocalUserIsDisabled() {
+        TenantContext.setCurrentTenantId(TENANT_ID);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        IdentityStore store = mock(IdentityStore.class);
+        User disabledUser = new User(TENANT_ID, "kc-disabled", "disabled.mgr", "disabled@tienda.test", Instant.now());
+        disabledUser.deactivate();
+        when(authentication.login("disabled.mgr", "Pass123!"))
+                .thenReturn(new AuthenticationTokens("access-1", "refresh-1", "Bearer", 300));
+        when(authentication.refresh("refresh-1"))
+                .thenReturn(new AuthenticationTokens("access-2", "refresh-2", "Bearer", 300));
+        when(authentication.getUserInfo("access-1"))
+                .thenReturn(new IdentityProfile("kc-disabled", "disabled.mgr", "disabled@tienda.test", TENANT_ID));
+        when(authentication.getUserInfo("access-2"))
+                .thenReturn(new IdentityProfile("kc-disabled", "disabled.mgr", "disabled@tienda.test", TENANT_ID));
+        when(store.findUserByKeycloakId(TENANT_ID, "kc-disabled")).thenReturn(Optional.of(disabledUser));
+        UserService service = service(authentication, store);
+
+        assertThatThrownBy(() -> service.authenticateUser("disabled.mgr", "Pass123!"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        assertThatThrownBy(() -> service.refreshSession("refresh-1"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        verify(store, never()).saveUser(any());
     }
 
     private void authenticateJwt(String subject, String username, String tenantId) {

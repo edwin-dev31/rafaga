@@ -15,6 +15,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -92,6 +94,9 @@ class IdentityExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     ApiError unexpectedError(RuntimeException exception) {
+        if (exception instanceof AccessDeniedException || exception instanceof AuthenticationException) {
+            throw exception;
+        }
         log.error("Unexpected error in identity module: {}", exception.getMessage(), exception);
         return ApiError.of("INTERNAL_ERROR", "An internal error occurred while processing your request");
     }

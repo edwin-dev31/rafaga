@@ -66,10 +66,30 @@ class AuthenticatedCartCustomerAccessTest {
     }
 
     @Test
-    void storeManagerCannotAccessAnotherCustomersCart() {
+    void storeManagerCanAccessAssistedCartForCustomerInSameTenant() {
         authenticateWithRole("STORE_MANAGER");
-        when(identities.findCustomerAccess(TENANT, "keycloak-a"))
-                .thenReturn(Optional.of(new CustomerAccess(UUID.randomUUID())));
+        UUID customerId = UUID.randomUUID();
+        when(identities.belongsToTenant(TENANT, customerId)).thenReturn(true);
+
+        assertThatCode(() -> access.requireAccess(customerId)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void storeManagerCannotAccessCartForCustomerOutsideCurrentTenant() {
+        authenticateWithRole("STORE_MANAGER");
+        UUID foreignCustomerId = UUID.randomUUID();
+        when(identities.belongsToTenant(TENANT, foreignCustomerId)).thenReturn(false);
+
+        assertThatThrownBy(() -> access.requireAccess(foreignCustomerId))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void storeManagerCannotAccessCartWhenJwtTenantDiffersFromCurrentTenant() {
+        Jwt mismatchedJwt = Jwt.withTokenValue("token").header("alg", "none")
+                .subject("keycloak-b").claim("tenant_id", "tenant-b").build();
+        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(
+                mismatchedJwt, List.of(new SimpleGrantedAuthority("ROLE_STORE_MANAGER"))));
 
         assertThatThrownBy(() -> access.requireAccess(UUID.randomUUID()))
                 .isInstanceOf(AccessDeniedException.class);

@@ -146,28 +146,31 @@ public class MediaController {
     record BrandingUploadRequest(@NotNull(message = "assetId is required") UUID assetId) {}
 
     @ExceptionHandler(MediaValidationException.class)
-    public ResponseEntity<ErrorResponse> handleValidation(MediaValidationException e) {
-        return ResponseEntity.badRequest().body(new ErrorResponse(e.getCode(), e.getMessage()));
+    public ResponseEntity<com.rafaga.backend.common.application.ApiError> handleValidation(MediaValidationException e) {
+        return ResponseEntity.badRequest()
+                .body(com.rafaga.backend.common.application.ApiError.of(e.getCode(), e.getMessage()));
     }
 
     @ExceptionHandler(MediaNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(MediaNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse("MEDIA_NOT_FOUND", e.getMessage()));
+    public ResponseEntity<com.rafaga.backend.common.application.ApiError> handleNotFound(MediaNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(com.rafaga.backend.common.application.ApiError.of("MEDIA_NOT_FOUND", e.getMessage()));
     }
 
     @ExceptionHandler(MediaConflictException.class)
-    public ResponseEntity<ErrorResponse> handleConflict(MediaConflictException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(e.getCode(), e.getMessage()));
+    public ResponseEntity<com.rafaga.backend.common.application.ApiError> handleConflict(MediaConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(com.rafaga.backend.common.application.ApiError.of(e.getCode(), e.getMessage()));
     }
 
     @ExceptionHandler(jakarta.validation.ConstraintViolationException.class)
-    public ResponseEntity<ErrorResponse> handleConstraintViolation(jakarta.validation.ConstraintViolationException e) {
+    public ResponseEntity<com.rafaga.backend.common.application.ApiError> handleConstraintViolation(
+            jakarta.validation.ConstraintViolationException e) {
         String message = e.getConstraintViolations().stream()
             .map(v -> v.getPropertyPath() + ": " + v.getMessage())
             .findFirst()
             .orElse(e.getMessage());
-        return ResponseEntity.badRequest().body(new ErrorResponse("MEDIA_VALIDATION_ERROR", message));
+        return ResponseEntity.badRequest()
+                .body(com.rafaga.backend.common.application.ApiError.of("MEDIA_VALIDATION_ERROR", message));
     }
-
-    record ErrorResponse(String code, String message) {}
 }

@@ -211,6 +211,95 @@ class CartApiIntegrationTest {
                 .andExpect(jsonPath("$.items").isEmpty());
     }
 
+    @Test
+    void storeManagerManagesAndChecksOutAssistedCartForSameTenantDirectoryCustomerOnly() throws Exception {
+        Customer managerA = createCustomer(TENANT_A, "assisted-mgr-a");
+        Customer managerB = createCustomer(TENANT_B, "assisted-mgr-b");
+        ProductFixture product = createProductWithVariant(managerA);
+        awaitStock(managerA, product.id(), product.variantId());
+        adjustStock(TENANT_A, product.id(), product.variantId(), 10);
+
+        MvcResult buyerAResult = mvc.perform(post("/api/customers")
+                        .header("Host", HOST_A)
+                        .with(jwtFor(TENANT_A, managerA.keycloakId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Cliente Asistido A",
+                                  "email": "asistido-%s@tienda-a.test"
+                                }
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID buyerAId = UUID.fromString(
+                mapper.readTree(buyerAResult.getResponse().getContentAsString()).path("id").asText());
+
+        MvcResult buyerBResult = mvc.perform(post("/api/customers")
+                        .header("Host", HOST_B)
+                        .with(jwtFor(TENANT_B, managerB.keycloakId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Cliente Tienda B",
+                                  "email": "cliente-%s@tienda-b.test"
+                                }
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID buyerBId = UUID.fromString(
+                mapper.readTree(buyerBResult.getResponse().getContentAsString()).path("id").asText());
+
+        // Manager A can create, modify, read, and checkout an assisted cart for Buyer A (different from managerA.id)
+        mvc.perform(get("/api/carts").param("customerId", buyerAId.toString())
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, managerA.keycloakId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerId").value(buyerAId.toString()));
+
+        MvcResult updatedCart = mvc.perform(put("/api/carts/items")
+                        .header("Host", HOST_A)
+                        .with(jwtFor(TENANT_A, managerA.keycloakId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customerId\":\"" + buyerAId + "\",\"productId\":\"" + product.id()
+                                + "\",\"variantId\":\"" + product.variantId() + "\",\"quantity\":2}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(25.00))
+                .andReturn();
+        String assistedCartId = mapper.readTree(updatedCart.getResponse().getContentAsString()).path("id").asText();
+
+        mvc.perform(get("/api/carts/{cartId}", assistedCartId)
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, managerA.keycloakId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerId").value(buyerAId.toString()));
+
+        MvcResult checkedOut = mvc.perform(post("/api/carts/checkout")
+                        .param("customerId", buyerAId.toString())
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, managerA.keycloakId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CHECKED_OUT"))
+                .andExpect(jsonPath("$.orderId").isNotEmpty())
+                .andReturn();
+        String orderId = mapper.readTree(checkedOut.getResponse().getContentAsString()).path("orderId").asText();
+
+        mvc.perform(get("/api/orders/{orderId}", orderId)
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, managerA.keycloakId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerId").value(buyerAId.toString()))
+                .andExpect(jsonPath("$.total").value(25.00));
+
+        // Manager A cannot manage carts for a customer of Tenant B or an unknown UUID
+        mvc.perform(get("/api/carts").param("customerId", buyerBId.toString())
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A, managerA.keycloakId())))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(put("/api/carts/items")
+                        .header("Host", HOST_A)
+                        .with(jwtFor(TENANT_A, managerA.keycloakId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customerId\":\"" + UUID.randomUUID() + "\",\"productId\":\"" + product.id()
+                                + "\",\"variantId\":\"" + product.variantId() + "\",\"quantity\":1}"))
+                .andExpect(status().isForbidden());
+    }
+
     private String upsertItem(Customer customer, ProductFixture product, int quantity) throws Exception {
         MvcResult result = mvc.perform(put("/api/carts/items").header("Host", HOST_A)
                         .with(jwtFor(TENANT_A, customer.keycloakId()))

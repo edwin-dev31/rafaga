@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -36,10 +37,13 @@ public class StorefrontCatalogController {
 
     @GetMapping("/products")
     public ResponseEntity<Page<StorefrontProductResponse>> listProducts(
+            @RequestParam(name = "q", required = false) String query,
+            @RequestParam(name = "categoryId", required = false) UUID categoryId,
+            @RequestParam(name = "categorySlug", required = false) String categorySlug,
             @PageableDefault(size = 20) Pageable pageable) {
         return ResponseEntity.ok()
                 .cacheControl(CATALOG_CACHE)
-                .body(service.listProducts(pageable));
+                .body(service.listProducts(query, categoryId, categorySlug, pageable));
     }
 
     @GetMapping("/products/{productId}")

@@ -1,14 +1,18 @@
 package com.rafaga.backend.tenant.infrastructure.persistence;
 
+import com.rafaga.backend.tenant.application.port.TenantSearchFilter;
 import com.rafaga.backend.tenant.application.service.TenantDirectoryService;
 import com.rafaga.backend.tenant.domain.model.DatabaseConfig;
 import com.rafaga.backend.tenant.domain.model.DomainStatus;
 import com.rafaga.backend.tenant.domain.model.FeatureFlag;
 import com.rafaga.backend.tenant.domain.model.Tenant;
 import com.rafaga.backend.tenant.domain.model.TenantConfig;
-import com.rafaga.backend.tenant.domain.model.TenantStatus;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -17,6 +21,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +66,43 @@ public class TenantConfigurationStore {
         return tenantRepository.findAll().stream()
                 .map(this::toConfig)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TenantConfig> search(TenantSearchFilter filter, Pageable pageable) {
+        TenantSearchFilter effective = filter == null ? TenantSearchFilter.empty() : filter;
+        Specification<Tenant> spec = (root, cq, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (effective.status() != null) {
+                predicates.add(cb.equal(root.get("status"), effective.status()));
+            }
+            if (effective.planId() != null && !effective.planId().isBlank()) {
+                predicates.add(cb.equal(
+                        cb.lower(root.get("planId")),
+                        effective.planId().trim().toLowerCase(Locale.ROOT)));
+            }
+            if (effective.deploymentMode() != null) {
+                predicates.add(cb.equal(root.get("deploymentMode"), effective.deploymentMode()));
+            }
+            if (effective.query() != null && !effective.query().isBlank()) {
+                String pattern = "%" + effective.query().trim().toLowerCase(Locale.ROOT) + "%";
+                Predicate byName = cb.like(cb.lower(root.get("name")), pattern);
+                Predicate byId = cb.like(cb.lower(root.get("id")), pattern);
+                if (cq != null) {
+                    Subquery<String> domainSubquery = cq.subquery(String.class);
+                    Root<TenantDomainControl> domainRoot = domainSubquery.from(TenantDomainControl.class);
+                    domainSubquery.select(domainRoot.get("tenantId"))
+                            .where(
+                                    cb.equal(domainRoot.get("tenantId"), root.get("id")),
+                                    cb.like(cb.lower(domainRoot.get("domain")), pattern));
+                    predicates.add(cb.or(byName, byId, cb.exists(domainSubquery)));
+                } else {
+                    predicates.add(cb.or(byName, byId));
+                }
+            }
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        return tenantRepository.findAll(spec, pageable).map(this::toConfig);
     }
 
     @Transactional

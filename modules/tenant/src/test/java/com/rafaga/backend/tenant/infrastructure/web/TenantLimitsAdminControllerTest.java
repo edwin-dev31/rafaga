@@ -79,7 +79,8 @@ class TenantLimitsAdminControllerTest {
         when(service.getLimits("missing")).thenThrow(new TenantNotFoundException("missing"));
 
         mockMvc(service).perform(get("/api/admin/tenants/missing/limits"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     private MockMvc mockMvc(TenantLimitsService service) {

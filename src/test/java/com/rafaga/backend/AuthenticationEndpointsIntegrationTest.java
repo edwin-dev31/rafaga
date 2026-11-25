@@ -3,6 +3,7 @@ package com.rafaga.backend;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -220,6 +221,244 @@ class AuthenticationEndpointsIntegrationTest {
                                 "password", "SecurePassword123!"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.username").value(username));
+    }
+
+    @Test
+    void superAdminCanResetPasswordForSelectedTenantUserAndRejectsWrongTenant() throws Exception {
+        String resetTenantId = "pwd-" + UUID.randomUUID().toString().substring(0, 16);
+        String resetTenantDomain = resetTenantId + ".rafaga.test";
+        tenantRegistry.register(new TenantConfig(
+                resetTenantId,
+                "Password Reset Store",
+                List.of(resetTenantDomain),
+                DeploymentMode.SHARED_DB,
+                null,
+                "pro",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true)));
+        tenantLimitsService.updateLimits(resetTenantId, "pro", null, null, null, 100, null);
+
+        String adminToken = accessToken();
+        String username = "reset-target-" + UUID.randomUUID();
+        String initialPassword = "InitialPassword123!";
+        String rotatedPassword = "RotatedPassword456!";
+
+        MvcResult created = mockMvc.perform(post("/api/admin/tenants/{tenantId}/users", resetTenantId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "firstName", "Target",
+                                "lastName", "Manager",
+                                "email", username + "@example.test",
+                                "password", initialPassword,
+                                "role", "STORE_MANAGER"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String userId = objectMapper.readTree(created.getResponse().getContentAsString()).path("id").asText();
+
+        // Cross-tenant reset attempt must fail with 404 without mutating Keycloak password
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", TENANT_ID, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("newPassword", rotatedPassword))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        // Reset under the selected tenant from dashboard (no store Host header required)
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", resetTenantId, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "newPassword", rotatedPassword,
+                                "temporary", false))))
+                .andExpect(status().isNoContent());
+
+        // Old password fails, rotated password succeeds
+        mockMvc.perform(post("/api/public/auth/login")
+                        .with(request -> {
+                            request.setServerName(resetTenantDomain);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", initialPassword))))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/public/auth/login")
+                        .with(request -> {
+                            request.setServerName(resetTenantDomain);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", rotatedPassword))))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void superAdminCanListAndUpdateTenantUserRolesInKeycloak() throws Exception {
+        String rolesTenantId = "roles-" + UUID.randomUUID().toString().substring(0, 16);
+        String rolesTenantDomain = rolesTenantId + ".rafaga.test";
+        tenantRegistry.register(new TenantConfig(
+                rolesTenantId,
+                "Roles Store",
+                List.of(rolesTenantDomain),
+                DeploymentMode.SHARED_DB,
+                null,
+                "pro",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true)));
+        tenantLimitsService.updateLimits(rolesTenantId, "pro", null, null, null, 100, null);
+
+        String adminToken = accessToken();
+        String username = "role-user-" + UUID.randomUUID();
+        String password = "RolePassword123!";
+
+        MvcResult created = mockMvc.perform(post("/api/admin/tenants/{tenantId}/users", rolesTenantId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "firstName", "Role",
+                                "lastName", "Target",
+                                "email", username + "@example.test",
+                                "password", password,
+                                "role", "CUSTOMER"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.roles[0]").value("CUSTOMER"))
+                .andReturn();
+        String userId = objectMapper.readTree(created.getResponse().getContentAsString()).path("id").asText();
+
+        mockMvc.perform(get("/api/admin/tenants/{tenantId}/users", rolesTenantId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].roles[0]").value("CUSTOMER"));
+
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/roles", rolesTenantId, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roles\":[\"UNKNOWN_ROLE\"]}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/roles", rolesTenantId, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"roles\":[\"STORE_MANAGER\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles[0]").value("STORE_MANAGER"));
+
+        mockMvc.perform(get("/api/admin/tenants/{tenantId}/users", rolesTenantId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].roles[0]").value("STORE_MANAGER"));
+
+        MvcResult loginRes = mockMvc.perform(post("/api/public/auth/login")
+                        .with(request -> {
+                            request.setServerName(rolesTenantDomain);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", password))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String managerToken = objectMapper.readTree(loginRes.getResponse().getContentAsString())
+                .path("accessToken").asText();
+
+        mockMvc.perform(get("/api/users/me")
+                        .with(request -> {
+                            request.setServerName(rolesTenantDomain);
+                            return request;
+                        })
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roles[0]").value("STORE_MANAGER"));
+    }
+
+    @Test
+    void refreshesAndLogsOutSessionAndRejectsRefreshAfterDeactivation() throws Exception {
+        String sessionTenantId = "sess-" + UUID.randomUUID().toString().substring(0, 16);
+        String sessionTenantDomain = sessionTenantId + ".rafaga.test";
+        tenantRegistry.register(new TenantConfig(
+                sessionTenantId,
+                "Session Store",
+                List.of(sessionTenantDomain),
+                DeploymentMode.SHARED_DB,
+                null,
+                "pro",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true)));
+        tenantLimitsService.updateLimits(sessionTenantId, "pro", null, null, null, 100, null);
+
+        String adminToken = accessToken();
+        String username = "session-mgr-" + UUID.randomUUID();
+        String password = "SessionPassword123!";
+
+        MvcResult created = mockMvc.perform(post("/api/admin/tenants/{tenantId}/users", sessionTenantId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "firstName", "Session",
+                                "lastName", "Manager",
+                                "email", username + "@example.test",
+                                "password", password,
+                                "role", "STORE_MANAGER"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String userId = objectMapper.readTree(created.getResponse().getContentAsString()).path("id").asText();
+
+        MvcResult loginResult = mockMvc.perform(post("/api/public/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", password))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String refreshToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+                .path("refreshToken").asText();
+
+        MvcResult refreshed = mockMvc.perform(post("/api/public/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", refreshToken))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String nextRefreshToken = objectMapper.readTree(refreshed.getResponse().getContentAsString())
+                .path("refreshToken").asText();
+
+        mockMvc.perform(post("/api/public/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", nextRefreshToken))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/public/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", nextRefreshToken))))
+                .andExpect(status().isUnauthorized());
+
+        MvcResult secondLogin = mockMvc.perform(post("/api/public/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", password))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String activeRefreshToken = objectMapper.readTree(secondLogin.getResponse().getContentAsString())
+                .path("refreshToken").asText();
+
+        mockMvc.perform(post("/api/admin/tenants/{tenantId}/users/{userId}/deactivate", sessionTenantId, userId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISABLED"));
+
+        mockMvc.perform(post("/api/public/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("refreshToken", activeRefreshToken))))
+                .andExpect(status().isUnauthorized());
     }
 
     private String accessToken() throws Exception {

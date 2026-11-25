@@ -104,6 +104,22 @@ class JpaCatalogStore implements CatalogStore {
     }
 
     @Override
+    public boolean hasChildCategories(UUID categoryId, String tenantId) {
+        return categories.existsByTenantIdAndParent_Id(tenantId, categoryId);
+    }
+
+    @Override
+    public boolean hasProductsInCategory(UUID categoryId, String tenantId) {
+        return products.existsByTenantIdAndCategories_Id(tenantId, categoryId);
+    }
+
+    @Override
+    public void deleteCategory(Category category) {
+        categories.delete(category);
+        categories.flush();
+    }
+
+    @Override
     public Page<Product> findActiveProducts(String tenantId, Pageable pageable) {
         return products.findAllByTenantIdAndStatus(tenantId, ProductStatus.ACTIVE, pageable);
     }

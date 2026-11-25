@@ -17,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CategoryService {
+    static final String CATEGORY_TREE_CACHE_KEY =
+            "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId()";
+
     private final CatalogStore store;
 
     public CategoryService(CatalogStore store) {
@@ -24,7 +27,7 @@ public class CategoryService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "categories", allEntries = true)
+    @CacheEvict(cacheNames = "categories", key = CATEGORY_TREE_CACHE_KEY)
     public CategoryView createCategory(String name, String slug, UUID parentId, int displayOrder) {
         String tenantId = TenantContext.getCurrentTenantId();
         if (store.findCategoryBySlug(slug, tenantId).isPresent()) {
@@ -35,7 +38,7 @@ public class CategoryService {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "categories", allEntries = true)
+    @CacheEvict(cacheNames = "categories", key = CATEGORY_TREE_CACHE_KEY)
     public CategoryView updateCategory(UUID categoryId, String name, String slug,
             UUID parentId, int displayOrder) {
         String tenantId = TenantContext.getCurrentTenantId();
@@ -54,8 +57,22 @@ public class CategoryService {
         return CategoryView.from(category(categoryId, TenantContext.getCurrentTenantId()));
     }
 
+    @Transactional
+    @CacheEvict(cacheNames = "categories", key = CATEGORY_TREE_CACHE_KEY)
+    public void deleteCategory(UUID categoryId) {
+        String tenantId = TenantContext.getCurrentTenantId();
+        Category category = category(categoryId, tenantId);
+        if (store.hasChildCategories(categoryId, tenantId)) {
+            throw new CatalogConflictException("Category has child categories and cannot be deleted");
+        }
+        if (store.hasProductsInCategory(categoryId, tenantId)) {
+            throw new CatalogConflictException("Category is assigned to products and cannot be deleted");
+        }
+        store.deleteCategory(category);
+    }
+
     @Transactional(readOnly = true)
-    @Cacheable(cacheNames = "categories", keyGenerator = "tenantScopedCacheKeyGenerator")
+    @Cacheable(cacheNames = "categories", key = CATEGORY_TREE_CACHE_KEY)
     public List<CategoryNode> getCategoryTree() {
         List<Category> categories = store.findCategories(TenantContext.getCurrentTenantId());
         Map<UUID, List<Category>> byParent = new HashMap<>();

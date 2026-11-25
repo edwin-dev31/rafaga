@@ -45,7 +45,7 @@ public class OrderController {
     }
 
     @GetMapping("/report")
-    @RequiresFeature("reports")
+    @RequiresFeature("analytics")
     public OrderReportView report(
             @RequestParam(name = "from", required = false) Instant from,
             @RequestParam(name = "to", required = false) Instant to) {

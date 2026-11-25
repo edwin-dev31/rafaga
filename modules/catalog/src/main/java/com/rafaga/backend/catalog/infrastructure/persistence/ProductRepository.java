@@ -16,4 +16,5 @@ interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpecificati
     Page<Product> findAllByTenantId(String tenantId, Pageable pageable);
     Page<Product> findAllByTenantIdAndStatus(String tenantId, ProductStatus status, Pageable pageable);
     Optional<Product> findByIdAndTenantIdAndStatus(UUID id, String tenantId, ProductStatus status);
+    boolean existsByTenantIdAndCategories_Id(String tenantId, UUID categoryId);
 }

@@ -10,7 +10,9 @@ import com.rafaga.backend.tenant.application.port.TenantRegistry;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.data.domain.Page;
@@ -19,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -79,6 +82,31 @@ public class TenantUserAdminController {
                 userService.setTenantUserStatus(tenantId, userId, UserStatus.DISABLED)));
     }
 
+    @PutMapping("/{userId}/password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(
+            @PathVariable("tenantId") String tenantId,
+            @PathVariable("userId") UUID userId,
+            @Valid @RequestBody ResetTenantUserPasswordRequest request) {
+        inTenant(tenantId, () -> {
+            userService.resetTenantUserPassword(
+                    tenantId,
+                    userId,
+                    request.newPassword(),
+                    Boolean.TRUE.equals(request.temporary()));
+            return null;
+        });
+    }
+
+    @PutMapping("/{userId}/roles")
+    public UserResponse updateRoles(
+            @PathVariable("tenantId") String tenantId,
+            @PathVariable("userId") UUID userId,
+            @Valid @RequestBody UpdateTenantUserRolesRequest request) {
+        return inTenant(tenantId, () -> UserResponse.from(
+                userService.updateTenantUserRoles(tenantId, userId, request.roles())));
+    }
+
     private <T> T inTenant(String tenantId, Supplier<T> action) {
         tenantRegistry.findById(tenantId)
                 .orElseThrow(() -> new IdentityResourceNotFoundException("Tenant", tenantId));
@@ -104,9 +132,19 @@ public class TenantUserAdminController {
             String role) {
     }
 
-    public record UserResponse(UUID id, String username, String email, UserStatus status) {
+    public record ResetTenantUserPasswordRequest(
+            @NotBlank @Size(min = 8, max = 128) String newPassword,
+            Boolean temporary) {
+    }
+
+    public record UpdateTenantUserRolesRequest(
+            @NotEmpty List<@NotBlank String> roles) {
+    }
+
+    public record UserResponse(UUID id, String username, String email, UserStatus status, List<String> roles) {
         static UserResponse from(UserProfile profile) {
-            return new UserResponse(profile.id(), profile.username(), profile.email(), profile.status());
+            return new UserResponse(
+                    profile.id(), profile.username(), profile.email(), profile.status(), profile.roles());
         }
     }
 }
