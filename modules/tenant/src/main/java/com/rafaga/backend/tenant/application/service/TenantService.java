@@ -8,6 +8,7 @@ import com.rafaga.backend.tenant.application.command.TenantUpdate;
 import com.rafaga.backend.tenant.application.exception.TenantNotFoundException;
 import com.rafaga.backend.tenant.application.plan.PlanFeatureDefaults;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.application.port.TenantSearchFilter;
 import com.rafaga.backend.tenant.domain.event.TenantCreatedEvent;
 import com.rafaga.backend.tenant.domain.event.TenantStatusChangedEvent;
 import com.rafaga.backend.tenant.domain.event.TenantUpdatedEvent;
@@ -24,6 +25,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -170,6 +173,11 @@ public class TenantService {
     @Transactional(readOnly = true)
     public List<TenantConfig> getAllTenants() {
         return tenantRegistry.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TenantConfig> searchTenants(TenantSearchFilter filter, Pageable pageable) {
+        return tenantRegistry.search(filter == null ? TenantSearchFilter.empty() : filter, pageable);
     }
 
     @Transactional

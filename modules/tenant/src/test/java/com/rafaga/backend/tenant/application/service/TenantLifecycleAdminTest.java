@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -12,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.rafaga.backend.tenant.application.command.TenantUpdate;
 import com.rafaga.backend.tenant.application.plan.PlanFeatureDefaults;
 import com.rafaga.backend.tenant.application.port.TenantRegistry;
+import com.rafaga.backend.tenant.application.port.TenantSearchFilter;
 import com.rafaga.backend.tenant.domain.event.TenantStatusChangedEvent;
 import com.rafaga.backend.tenant.domain.model.DatabaseConfig;
 import com.rafaga.backend.tenant.domain.model.DeploymentMode;
@@ -23,6 +25,9 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -94,5 +99,32 @@ class TenantLifecycleAdminTest {
         mvc.perform(post("/api/admin/tenants/tenant-1/reactivate"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test
+    void listsAndFiltersTenantsWithPaginationInTenantAdminController() throws Exception {
+        TenantService service = mock(TenantService.class);
+        TenantConfig proStore = new TenantConfig(
+                "tenant-pro", "Tienda Pro", List.of("pro.test"), DeploymentMode.SHARED_DB,
+                null, "pro", TenantStatus.ACTIVE, Map.of("analytics", true));
+        when(service.searchTenants(
+                new TenantSearchFilter("pro", TenantStatus.ACTIVE, "pro", DeploymentMode.SHARED_DB),
+                PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(proStore), PageRequest.of(0, 10), 1));
+
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new TenantAdminController(service))
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
+                .build();
+
+        mvc.perform(get("/api/admin/tenants")
+                        .param("q", "pro")
+                        .param("status", "ACTIVE")
+                        .param("planId", "pro")
+                        .param("deploymentMode", "SHARED_DB")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value("tenant-pro"));
     }
 }
