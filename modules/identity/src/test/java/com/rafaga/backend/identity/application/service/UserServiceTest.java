@@ -215,6 +215,24 @@ class UserServiceTest {
     }
 
     @Test
+    void resetsTenantUserPasswordForSelectedTenantAndRejectsCrossTenantTarget() {
+        TenantContext.clear();
+        IdentityStore store = mock(IdentityStore.class);
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        UUID userId = UUID.randomUUID();
+        User user = new User(TENANT_ID, "keycloak-77", "manager", "manager@tienda.test", Instant.now());
+        when(store.findUserById(TENANT_ID, userId)).thenReturn(Optional.of(user));
+        when(store.findUserById("tenant-b", userId)).thenReturn(Optional.empty());
+        UserService service = service(authentication, store);
+
+        service.resetTenantUserPassword(TENANT_ID, userId, "AdminResetPass123!", true);
+        verify(authentication).updatePassword("keycloak-77", "AdminResetPass123!", true);
+
+        assertThatThrownBy(() -> service.resetTenantUserPassword("tenant-b", userId, "AdminResetPass123!", false))
+                .isInstanceOf(IdentityResourceNotFoundException.class);
+    }
+
+    @Test
     void authenticatesFromDashboardWithoutHostTenantByResolvingJwtTenantClaim() {
         TenantContext.clear();
         AuthenticationPort authentication = mock(AuthenticationPort.class);

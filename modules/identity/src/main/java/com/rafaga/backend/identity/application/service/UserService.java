@@ -329,7 +329,11 @@ public class UserService {
 
     @Transactional
     public void resetUserPassword(UUID userId, String newPassword, boolean temporary) {
-        String tenantId = currentTenantId();
+        resetTenantUserPassword(currentTenantId(), userId, newPassword, temporary);
+    }
+
+    @Transactional
+    public void resetTenantUserPassword(String tenantId, UUID userId, String newPassword, boolean temporary) {
         if (newPassword == null || newPassword.isBlank()) {
             throw new PasswordPolicyViolationException("New password must not be blank");
         }

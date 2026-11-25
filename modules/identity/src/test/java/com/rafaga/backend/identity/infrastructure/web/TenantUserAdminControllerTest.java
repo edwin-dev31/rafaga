@@ -2,13 +2,17 @@ package com.rafaga.backend.identity.infrastructure.web;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.rafaga.backend.identity.application.exception.IdentityResourceNotFoundException;
 import com.rafaga.backend.identity.application.service.UserProfile;
 import com.rafaga.backend.identity.application.service.UserService;
 import com.rafaga.backend.identity.domain.model.UserStatus;
@@ -120,6 +124,41 @@ class TenantUserAdminControllerTest {
         mockMvc(registry, service).perform(post("/api/admin/tenants/{tenantId}/users/{userId}/activate", TENANT_ID, userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test
+    void resetsTenantUserPasswordAndRejectsInvalidOrCrossTenantRequests() throws Exception {
+        TenantRegistry registry = activeRegistry();
+        UserService service = mock(UserService.class);
+        UUID userId = UUID.randomUUID();
+        UUID otherTenantUserId = UUID.randomUUID();
+        doThrow(new IdentityResourceNotFoundException("User", otherTenantUserId))
+                .when(service).resetTenantUserPassword(TENANT_ID, otherTenantUserId, "StrongPassword123!", false);
+
+        MockMvc mvc = mockMvc(registry, service);
+        mvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", TENANT_ID, userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newPassword\":\"StrongPassword123!\"}"))
+                .andExpect(status().isNoContent());
+        verify(service).resetTenantUserPassword(TENANT_ID, userId, "StrongPassword123!", false);
+
+        mvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", TENANT_ID, userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newPassword\":\"StrongPassword123!\",\"temporary\":true}"))
+                .andExpect(status().isNoContent());
+        verify(service).resetTenantUserPassword(TENANT_ID, userId, "StrongPassword123!", true);
+
+        mvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", TENANT_ID, userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newPassword\":\"short\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        mvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", TENANT_ID, otherTenantUserId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newPassword\":\"StrongPassword123!\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test

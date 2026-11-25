@@ -3,6 +3,7 @@ package com.rafaga.backend;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -220,6 +221,81 @@ class AuthenticationEndpointsIntegrationTest {
                                 "password", "SecurePassword123!"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.username").value(username));
+    }
+
+    @Test
+    void superAdminCanResetPasswordForSelectedTenantUserAndRejectsWrongTenant() throws Exception {
+        String resetTenantId = "pwd-" + UUID.randomUUID().toString().substring(0, 16);
+        String resetTenantDomain = resetTenantId + ".rafaga.test";
+        tenantRegistry.register(new TenantConfig(
+                resetTenantId,
+                "Password Reset Store",
+                List.of(resetTenantDomain),
+                DeploymentMode.SHARED_DB,
+                null,
+                "pro",
+                TenantStatus.ACTIVE,
+                Map.of("catalog", true)));
+        tenantLimitsService.updateLimits(resetTenantId, "pro", null, null, null, 100, null);
+
+        String adminToken = accessToken();
+        String username = "reset-target-" + UUID.randomUUID();
+        String initialPassword = "InitialPassword123!";
+        String rotatedPassword = "RotatedPassword456!";
+
+        MvcResult created = mockMvc.perform(post("/api/admin/tenants/{tenantId}/users", resetTenantId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "firstName", "Target",
+                                "lastName", "Manager",
+                                "email", username + "@example.test",
+                                "password", initialPassword,
+                                "role", "STORE_MANAGER"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String userId = objectMapper.readTree(created.getResponse().getContentAsString()).path("id").asText();
+
+        // Cross-tenant reset attempt must fail with 404 without mutating Keycloak password
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", TENANT_ID, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("newPassword", rotatedPassword))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+
+        // Reset under the selected tenant from dashboard (no store Host header required)
+        mockMvc.perform(put("/api/admin/tenants/{tenantId}/users/{userId}/password", resetTenantId, userId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "newPassword", rotatedPassword,
+                                "temporary", false))))
+                .andExpect(status().isNoContent());
+
+        // Old password fails, rotated password succeeds
+        mockMvc.perform(post("/api/public/auth/login")
+                        .with(request -> {
+                            request.setServerName(resetTenantDomain);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", initialPassword))))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/public/auth/login")
+                        .with(request -> {
+                            request.setServerName(resetTenantDomain);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", username,
+                                "password", rotatedPassword))))
+                .andExpect(status().isOk());
     }
 
     private String accessToken() throws Exception {
