@@ -52,6 +52,33 @@ class TenantUserAdminControllerTest {
     }
 
     @Test
+    void listsUsersWhenSearchQueryIsAbsentOrBlank() throws Exception {
+        TenantRegistry registry = activeRegistry();
+        UserService service = mock(UserService.class);
+        UUID userId = UUID.randomUUID();
+        PageImpl<UserProfile> page = new PageImpl<>(
+                List.of(new UserProfile(userId, "ana.store", "ana@tienda.test", UserStatus.ACTIVE)),
+                PageRequest.of(0, 20),
+                1);
+        when(service.listTenantUsers(eq(TENANT_ID), eq(null), eq(null), any())).thenReturn(page);
+        when(service.listTenantUsers(eq(TENANT_ID), eq(""), eq(null), any())).thenReturn(page);
+        when(service.listTenantUsers(eq(TENANT_ID), eq("   "), eq(null), any())).thenReturn(page);
+
+        MockMvc mvc = mockMvc(registry, service);
+        mvc.perform(get("/api/admin/tenants/{tenantId}/users", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(userId.toString()));
+
+        mvc.perform(get("/api/admin/tenants/{tenantId}/users", TENANT_ID).param("q", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].username").value("ana.store"));
+
+        mvc.perform(get("/api/admin/tenants/{tenantId}/users", TENANT_ID).param("q", "   "))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].username").value("ana.store"));
+    }
+
+    @Test
     void registersTenantManagerWithoutRegistrationTokenHeader() throws Exception {
         TenantRegistry registry = activeRegistry();
         UserService service = mock(UserService.class);
