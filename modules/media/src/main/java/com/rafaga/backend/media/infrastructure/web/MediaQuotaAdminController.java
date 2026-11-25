@@ -62,9 +62,9 @@ public class MediaQuotaAdminController {
     }
 
     @ExceptionHandler(MediaValidationException.class)
-    ResponseEntity<ErrorResponse> handleValidation(MediaValidationException exception) {
+    ResponseEntity<com.rafaga.backend.common.application.ApiError> handleValidation(MediaValidationException exception) {
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse(exception.getCode(), exception.getMessage()));
+                .body(com.rafaga.backend.common.application.ApiError.of(exception.getCode(), exception.getMessage()));
     }
 
     public record UpdateQuotaRequest(
@@ -88,9 +88,6 @@ public class MediaQuotaAdminController {
                     quota.usedAssets(), quota.usedStorageBytes(), quota.reservedAssets(),
                     quota.reservedBytes(), quota.effectiveUsedAssets(), quota.effectiveUsedBytes());
         }
-    }
-
-    record ErrorResponse(String code, String message) {
     }
 
     private ResponseStatusException tenantNotFound(String tenantId) {

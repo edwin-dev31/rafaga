@@ -1,5 +1,6 @@
 package com.rafaga.backend.media.infrastructure.web;
 
+import com.rafaga.backend.common.application.ApiError;
 import com.rafaga.backend.media.application.dto.AssociateBatch;
 import com.rafaga.backend.media.application.dto.ConfirmBatch;
 import com.rafaga.backend.media.application.dto.MediaAssetDto;
@@ -113,7 +114,7 @@ class MediaControllerTest {
 
     @Test
     void deleteAsset_returns409WhenInUse() {
-        MediaController.ErrorResponse response = controller.handleConflict(
+        ApiError response = controller.handleConflict(
             new MediaConflictException("MEDIA_ASSET_IN_USE", "En uso")
         ).getBody();
         assertThat(response.code()).isEqualTo("MEDIA_ASSET_IN_USE");
@@ -123,7 +124,7 @@ class MediaControllerTest {
     @Test
     void deleteAsset_returns404WhenNotFound() {
         UUID assetId = UUID.randomUUID();
-        MediaController.ErrorResponse response = controller.handleNotFound(
+        ApiError response = controller.handleNotFound(
             new MediaNotFoundException("MediaAsset", assetId)
         ).getBody();
         assertThat(response.code()).isEqualTo("MEDIA_NOT_FOUND");
@@ -173,7 +174,7 @@ class MediaControllerTest {
 
     @Test
     void listAssets_returns400ForInvalidStatus() {
-        MediaController.ErrorResponse response = controller.handleValidation(
+        ApiError response = controller.handleValidation(
             new MediaValidationException("MEDIA_INVALID_STATUS", "Estado inválido: INVALID")
         ).getBody();
         assertThat(response.code()).isEqualTo("MEDIA_INVALID_STATUS");
@@ -250,7 +251,7 @@ class MediaControllerTest {
 
     @Test
     void validationError_returns400() {
-        ResponseEntity<MediaController.ErrorResponse> result = controller.handleValidation(
+        ResponseEntity<ApiError> result = controller.handleValidation(
             new MediaValidationException("CODE", "message")
         );
 
