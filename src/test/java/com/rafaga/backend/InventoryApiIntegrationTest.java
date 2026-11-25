@@ -153,6 +153,40 @@ class InventoryApiIntegrationTest extends TenantIsolationTestBase {
         assertThat(stock.getStockLevel(productId, null).availableQuantity()).isEqualTo(8);
     }
 
+    @Test
+    void adjustsStockOnNewlyAddedVariantAfterProductDetailWasCached() throws Exception {
+        UUID productId = createProduct();
+        awaitStock(productId);
+
+        // Warm the product detail cache before adding a variant
+        mvc.perform(get("/api/products/{productId}", productId).header("Host", HOST_A)
+                        .with(jwtFor(TENANT_A)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.variants").isEmpty());
+
+        MvcResult variantAdded = mvc.perform(post("/api/products/{productId}/variants", productId)
+                        .header("Host", HOST_A).with(jwtFor(TENANT_A))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sku\":\"INV-VAR-" + UUID.randomUUID()
+                                + "\",\"name\":\"Talla M\",\"attributes\":{\"size\":\"M\"},\"priceAdjustment\":5.00}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String variantId = mapper.readTree(variantAdded.getResponse().getContentAsString())
+                .path("variants").get(0).path("id").asText();
+
+        mvc.perform(get("/api/products/{productId}", productId).header("Host", HOST_A)
+                        .with(jwtFor(TENANT_A)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.variants[0].id").value(variantId));
+
+        mvc.perform(post("/api/stock/{productId}/adjust", productId).header("Host", HOST_A)
+                        .with(jwtFor(TENANT_A)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"variantId\":\"" + variantId + "\",\"delta\":12,\"notes\":\"Initial variant stock\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.variantId").value(variantId))
+                .andExpect(jsonPath("$.availableQuantity").value(12));
+    }
+
     private UUID createProduct() throws Exception {
         MvcResult result = mvc.perform(post("/api/products").header("Host", HOST_A)
                         .with(jwtFor(TENANT_A)).contentType(MediaType.APPLICATION_JSON)

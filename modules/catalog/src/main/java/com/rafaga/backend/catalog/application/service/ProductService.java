@@ -34,6 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProductService implements CatalogProductAccess {
+    static final String PRODUCT_CACHE_KEY =
+            "T(com.rafaga.backend.common.application.tenant.TenantContext).getCurrentTenantId() + ':' + #p0";
+
     private final CatalogStore store;
     private final ApplicationEventPublisher events;
     private final TenantLimitsQuery limitsQuery;
@@ -91,7 +94,7 @@ public class ProductService implements CatalogProductAccess {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    @CacheEvict(cacheNames = "products", key = PRODUCT_CACHE_KEY)
     public ProductView updateProduct(UUID productId, UpdateProduct command) {
         String tenantId = TenantContext.getCurrentTenantId();
         Product product = product(productId, tenantId);
@@ -114,7 +117,7 @@ public class ProductService implements CatalogProductAccess {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    @Cacheable(cacheNames = "products", key = PRODUCT_CACHE_KEY)
     public ProductView getProductById(UUID productId) {
         return ProductView.from(product(productId, TenantContext.getCurrentTenantId()));
     }
@@ -134,7 +137,7 @@ public class ProductService implements CatalogProductAccess {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    @CacheEvict(cacheNames = "products", key = PRODUCT_CACHE_KEY)
     public void deleteProduct(UUID productId) {
         String tenantId = TenantContext.getCurrentTenantId();
         store.deleteProduct(product(productId, tenantId));
@@ -142,7 +145,7 @@ public class ProductService implements CatalogProductAccess {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    @CacheEvict(cacheNames = "products", key = PRODUCT_CACHE_KEY)
     public ProductView addVariant(UUID productId, CreateProduct.Variant command) {
         String tenantId = TenantContext.getCurrentTenantId();
         Product product = product(productId, tenantId);
@@ -154,7 +157,7 @@ public class ProductService implements CatalogProductAccess {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    @CacheEvict(cacheNames = "products", key = PRODUCT_CACHE_KEY)
     public ProductView updateVariant(
             UUID productId,
             UUID variantId,
@@ -176,7 +179,7 @@ public class ProductService implements CatalogProductAccess {
     }
 
     @Transactional
-    @CacheEvict(cacheNames = "products", keyGenerator = "tenantScopedCacheKeyGenerator")
+    @CacheEvict(cacheNames = "products", key = PRODUCT_CACHE_KEY)
     public ProductView archiveVariant(UUID productId, UUID variantId) {
         String tenantId = TenantContext.getCurrentTenantId();
         Product product = product(productId, tenantId);
