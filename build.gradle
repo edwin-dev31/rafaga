@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'checkstyle'
 	id 'jacoco'
+	id 'org.sonarqube' version '7.6.0.18749'
 	id 'org.springframework.boot' version '4.1.2'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -160,5 +161,15 @@ tasks.named('jacocoTestReport', JacocoReport) {
 		html.required = true
 		xml.required = true
 		csv.required = false
+	}
+}
+
+sonar {
+	properties {
+		property 'sonar.projectKey', System.getenv('SONAR_PROJECT_KEY') ?: 'edwin-dev31_rafaga'
+		property 'sonar.organization', System.getenv('SONAR_ORGANIZATION') ?: 'edwin-dev31'
+		property 'sonar.host.url', 'https://sonarcloud.io'
+		property 'sonar.coverage.jacoco.xmlReportPaths',
+				"${rootProject.layout.buildDirectory.get()}/reports/jacoco/test/jacocoTestReport.xml"
 	}
 }
