@@ -5,13 +5,14 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -25,7 +26,33 @@ public class FakeObjectStorage implements ObjectStorage {
 
     private final Map<String, StoredObject> store = new ConcurrentHashMap<>();
 
-    private record StoredObject(byte[] data, String contentType, Instant createdAt) {}
+    private record StoredObject(byte[] data, String contentType, Instant createdAt) {
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof StoredObject that)) {
+                return false;
+            }
+            return Arrays.equals(data, that.data)
+                    && Objects.equals(contentType, that.contentType)
+                    && Objects.equals(createdAt, that.createdAt);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Objects.hash(contentType, createdAt);
+            return 31 * result + Arrays.hashCode(data);
+        }
+
+        @Override
+        public String toString() {
+            return "StoredObject[data=" + Arrays.toString(data)
+                    + ", contentType=" + contentType
+                    + ", createdAt=" + createdAt + "]";
+        }
+    }
 
     @Override
     public PresignedUpload createUploadUrl(String uploadKey, String contentType, Duration expiry) {

@@ -65,7 +65,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -88,7 +90,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 .build();
     }
 

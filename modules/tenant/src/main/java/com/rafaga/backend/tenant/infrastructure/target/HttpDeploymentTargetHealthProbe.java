@@ -37,7 +37,7 @@ public class HttpDeploymentTargetHealthProbe implements DeploymentTargetHealthPr
         if (privateOrigin == null || privateOrigin.isBlank() || healthPath == null || healthPath.isBlank()) {
             return false;
         }
-        String base = privateOrigin.trim().replaceAll("/+$", "");
+        String base = stripTrailingSlashes(privateOrigin.trim());
         String path = healthPath.startsWith("/") ? healthPath : "/" + healthPath;
         try {
             return client.get()
@@ -49,5 +49,13 @@ public class HttpDeploymentTargetHealthProbe implements DeploymentTargetHealthPr
         } catch (Exception ex) {
             return false;
         }
+    }
+
+    private static String stripTrailingSlashes(String value) {
+        int end = value.length();
+        while (end > 0 && value.charAt(end - 1) == '/') {
+            end--;
+        }
+        return value.substring(0, end);
     }
 }
