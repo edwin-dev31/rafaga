@@ -27,7 +27,7 @@ public class KeycloakHealthIndicator implements HealthIndicator {
         }
         try {
             ResponseEntity<Void> response = restClient.get()
-                    .uri(issuerUri.replaceAll("/+$", "") + "/protocol/openid-connect/certs")
+                    .uri(stripTrailingSlashes(issuerUri) + "/protocol/openid-connect/certs")
                     .retrieve()
                     .toBodilessEntity();
             if (response.getStatusCode().is2xxSuccessful()) {
@@ -37,5 +37,13 @@ public class KeycloakHealthIndicator implements HealthIndicator {
         } catch (Exception exception) {
             return Health.down(exception).withDetail("issuer", issuerUri).build();
         }
+    }
+
+    private static String stripTrailingSlashes(String value) {
+        int end = value.length();
+        while (end > 0 && value.charAt(end - 1) == '/') {
+            end--;
+        }
+        return value.substring(0, end);
     }
 }

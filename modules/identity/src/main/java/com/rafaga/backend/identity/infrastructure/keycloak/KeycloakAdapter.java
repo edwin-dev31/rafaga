@@ -462,7 +462,12 @@ public class KeycloakAdapter implements AuthenticationPort {
     }
 
     private String issuerUri() {
-        return required(properties.getIssuerUri(), "issuerUri").replaceAll("/+$", "");
+        String value = required(properties.getIssuerUri(), "issuerUri");
+        int end = value.length();
+        while (end > 0 && value.charAt(end - 1) == '/') {
+            end--;
+        }
+        return value.substring(0, end);
     }
 
     private String required(String value, String propertyName) {
