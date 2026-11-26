@@ -6,6 +6,7 @@ import java.net.http.HttpClient;
 import java.util.List;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -17,6 +18,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 /** Production Cloudflare R2 bucket CORS adapter using explicit HTTPS origins only. */
 @Component
+@Primary
 @ConditionalOnProperty(name = "rafaga.cloudflare.enabled", havingValue = "true")
 public class CloudflareR2CorsAdapter implements R2CorsPort {
     private final RestClient client;

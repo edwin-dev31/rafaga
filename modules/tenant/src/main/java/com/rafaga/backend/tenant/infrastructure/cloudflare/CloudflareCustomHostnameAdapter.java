@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -21,6 +22,7 @@ import tools.jackson.databind.JsonNode;
 
 /** Production Cloudflare for SaaS custom-hostname adapter with bounded timeouts and safe errors. */
 @Component
+@Primary
 @EnableConfigurationProperties(CloudflareProperties.class)
 @ConditionalOnProperty(name = "rafaga.cloudflare.enabled", havingValue = "true")
 public class CloudflareCustomHostnameAdapter implements CloudflareHostnamePort {
