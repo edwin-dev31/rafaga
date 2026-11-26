@@ -226,6 +226,7 @@ public class UserService {
 
     @Transactional
     public UserProfile registerTenantUser(String tenantId, UserRegistration registration, String requestedRole) {
+        String safeTenantId = sanitizeForLog(tenantId);
         String role = normalizeRole(requestedRole);
         if (!"CUSTOMER".equals(role) && limitsQuery != null) {
             limitsQuery.findLimits(tenantId).ifPresent(limits -> {
@@ -240,19 +241,20 @@ public class UserService {
                     tenantId,
                     authenticationPort.registerUser(tenantId, registration, role),
                     List.of(role));
-            log.info("event=admin.user_register outcome=SUCCESS tenantId={} role={}", tenantId, role);
+            log.info("event=admin.user_register outcome=SUCCESS tenantId={} role={}", safeTenantId, role);
             return user;
         } catch (UserAlreadyExistsException exception) {
-            log.warn("event=admin.user_register outcome=USER_ALREADY_EXISTS tenantId={}", tenantId);
+            log.warn("event=admin.user_register outcome=USER_ALREADY_EXISTS tenantId={}", safeTenantId);
             throw exception;
         } catch (IdentityProviderUnavailableException exception) {
-            log.warn("event=admin.user_register outcome=IDP_UNAVAILABLE tenantId={}", tenantId);
+            log.warn("event=admin.user_register outcome=IDP_UNAVAILABLE tenantId={}", safeTenantId);
             throw exception;
         }
     }
 
     @Transactional
     public UserProfile setTenantUserStatus(String tenantId, UUID userId, UserStatus targetStatus) {
+        String safeTenantId = sanitizeForLog(tenantId);
         User user = findUser(tenantId, userId);
         boolean enable = targetStatus == UserStatus.ACTIVE;
         authenticationPort.setUserEnabled(user.getKeycloakId(), enable);
@@ -264,12 +266,13 @@ public class UserService {
         User saved = identityStore.saveUser(user);
         List<String> roles = safeRoles(authenticationPort.getUserRoles(saved.getKeycloakId()));
         log.info("event=admin.user_status outcome=SUCCESS tenantId={} userId={} status={}",
-                tenantId, userId, targetStatus);
+                safeTenantId, userId, targetStatus);
         return UserProfile.from(saved, roles);
     }
 
     @Transactional
     public UserProfile updateTenantUserRoles(String tenantId, UUID userId, List<String> requestedRoles) {
+        String safeTenantId = sanitizeForLog(tenantId);
         List<String> normalizedRoles = normalizeRoleList(requestedRoles);
         User user = findUser(tenantId, userId);
         List<String> currentRoles = safeRoles(authenticationPort.getUserRoles(user.getKeycloakId()));
@@ -287,10 +290,10 @@ public class UserService {
             List<String> updatedRoles = safeRoles(
                     authenticationPort.replaceUserRoles(user.getKeycloakId(), normalizedRoles));
             log.info("event=admin.user_roles outcome=SUCCESS tenantId={} userId={} roles={}",
-                    tenantId, userId, updatedRoles);
+                    safeTenantId, userId, updatedRoles);
             return UserProfile.from(user, updatedRoles);
         } catch (IdentityProviderUnavailableException exception) {
-            log.warn("event=admin.user_roles outcome=IDP_UNAVAILABLE tenantId={} userId={}", tenantId, userId);
+            log.warn("event=admin.user_roles outcome=IDP_UNAVAILABLE tenantId={} userId={}", safeTenantId, userId);
             throw exception;
         }
     }
@@ -392,19 +395,24 @@ public class UserService {
         if (newPassword == null || newPassword.isBlank()) {
             throw new PasswordPolicyViolationException("New password must not be blank");
         }
+        String safeTenantId = sanitizeForLog(tenantId);
         User user = findUser(tenantId, userId);
         try {
             authenticationPort.updatePassword(user.getKeycloakId(), newPassword, temporary);
-            log.info("event=auth.password_reset outcome=SUCCESS tenantId={} targetUserId={}", tenantId, userId);
+            log.info("event=auth.password_reset outcome=SUCCESS tenantId={} targetUserId={}", safeTenantId, userId);
         } catch (PasswordPolicyViolationException exception) {
             log.warn("event=auth.password_reset outcome=POLICY_VIOLATION tenantId={} targetUserId={}",
-                    tenantId, userId);
+                    safeTenantId, userId);
             throw exception;
         } catch (IdentityProviderUnavailableException exception) {
             log.warn("event=auth.password_reset outcome=IDP_UNAVAILABLE tenantId={} targetUserId={}",
-                    tenantId, userId);
+                    safeTenantId, userId);
             throw exception;
         }
+    }
+
+    private static String sanitizeForLog(String value) {
+        return value == null ? "null" : value.replace('\r', '_').replace('\n', '_');
     }
 
     private UserProfile synchronizeProfile(IdentityProfile profile) {

@@ -150,12 +150,13 @@ public class KeycloakAdapter implements AuthenticationPort {
 
     @Override
     public IdentityProfile registerUser(String tenantId, UserRegistration registration, String role) {
+        String safeTenantId = tenantId == null ? "null" : tenantId.replace('\r', '_').replace('\n', '_');
         String adminAccessToken;
         try {
             adminAccessToken = requestAdminAccessToken();
         } catch (ResourceAccessException | HttpServerErrorException exception) {
             log.warn("event=keycloak.provision outcome=IDP_UNAVAILABLE tenantId={} reason=admin_token_fetch_failed",
-                    tenantId);
+                    safeTenantId);
             throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
         }
         KeycloakUserRegistration payload = new KeycloakUserRegistration(
@@ -175,21 +176,21 @@ public class KeycloakAdapter implements AuthenticationPort {
                     .retrieve()
                     .toBodilessEntity();
         } catch (HttpClientErrorException.Conflict exception) {
-            log.warn("event=keycloak.provision outcome=CONFLICT tenantId={}", tenantId);
+            log.warn("event=keycloak.provision outcome=CONFLICT tenantId={}", safeTenantId);
             throw new UserAlreadyExistsException();
         } catch (ResourceAccessException | HttpServerErrorException exception) {
             log.warn("event=keycloak.provision outcome=IDP_UNAVAILABLE tenantId={} reason=user_create_failed",
-                    tenantId);
+                    safeTenantId);
             throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
         }
         String keycloakId = identifierFrom(response.getHeaders().getLocation());
         try {
             assignRealmRole(adminAccessToken, keycloakId, role);
         } catch (ResourceAccessException | HttpServerErrorException exception) {
-            log.warn("event=keycloak.provision outcome=ROLE_ASSIGNMENT_FAILED tenantId={}", tenantId);
+            log.warn("event=keycloak.provision outcome=ROLE_ASSIGNMENT_FAILED tenantId={}", safeTenantId);
             throw new IdentityProviderUnavailableException("Identity provider is temporarily unavailable", exception);
         }
-        log.info("event=keycloak.provision outcome=SUCCESS tenantId={} role={}", tenantId, role);
+        log.info("event=keycloak.provision outcome=SUCCESS tenantId={} role={}", safeTenantId, role);
         return new IdentityProfile(keycloakId, registration.username(), registration.email(), tenantId);
     }
 
