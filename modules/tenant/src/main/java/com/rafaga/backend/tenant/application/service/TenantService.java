@@ -200,7 +200,8 @@ public class TenantService {
             directoryService.suspendAllDomainsForTenant(tenantId);
         }
         eventPublisher.publishEvent(new TenantStatusChangedEvent(tenantId, current.status(), TenantStatus.INACTIVE));
-        log.info("event=tenant.deactivate outcome=SUCCESS tenantId={} actor={}", tenantId, currentActor());
+        log.info("event=tenant.deactivate outcome=SUCCESS tenantId={} actor={}",
+                sanitizeForLog(current.tenantId()), currentActor());
         return inactive;
     }
 
@@ -224,8 +225,13 @@ public class TenantService {
             directoryService.reactivateSuspendedDomainsForTenant(tenantId);
         }
         eventPublisher.publishEvent(new TenantStatusChangedEvent(tenantId, current.status(), TenantStatus.ACTIVE));
-        log.info("event=tenant.reactivate outcome=SUCCESS tenantId={} actor={}", tenantId, currentActor());
+        log.info("event=tenant.reactivate outcome=SUCCESS tenantId={} actor={}",
+                sanitizeForLog(current.tenantId()), currentActor());
         return active;
+    }
+
+    private static String sanitizeForLog(String value) {
+        return value == null ? "null" : value.replace('\r', '_').replace('\n', '_');
     }
 
     private String currentActor() {
