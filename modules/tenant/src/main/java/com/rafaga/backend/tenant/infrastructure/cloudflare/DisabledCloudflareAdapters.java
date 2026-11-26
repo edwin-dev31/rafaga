@@ -6,7 +6,7 @@ import com.rafaga.backend.tenant.application.port.CustomHostnameStatus;
 import com.rafaga.backend.tenant.application.port.R2CorsPort;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(CloudflareProperties.class)
 public class DisabledCloudflareAdapters {
     @Bean
-    @ConditionalOnMissingBean(CloudflareHostnamePort.class)
+    @ConditionalOnProperty(name = "rafaga.cloudflare.enabled", havingValue = "false", matchIfMissing = true)
     CloudflareHostnamePort disabledCloudflareHostnamePort() {
         return new CloudflareHostnamePort() {
             @Override
@@ -40,7 +40,7 @@ public class DisabledCloudflareAdapters {
     }
 
     @Bean
-    @ConditionalOnMissingBean(R2CorsPort.class)
+    @ConditionalOnProperty(name = "rafaga.cloudflare.enabled", havingValue = "false", matchIfMissing = true)
     R2CorsPort disabledR2CorsPort() {
         return (List<String> origins) -> {
             throw new CloudflareProvisioningException(

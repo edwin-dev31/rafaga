@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class TenantDatabaseMigrator implements DedicatedDatabaseMigration {
     private static final String MIGRATION_LOCATION = "classpath:db/migration";
+    private static final Pattern SAFE_PG_IDENTIFIER = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,62}$");
     private final ObjectProvider<TenantDatabaseCredentialsProvider> credentialsProvider;
     private final String[] migrationLocations;
 
@@ -122,8 +124,11 @@ public class TenantDatabaseMigrator implements DedicatedDatabaseMigration {
         }
     }
 
-    private String quotedIdentifier(String identifier) {
-        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    static String quotedIdentifier(String identifier) {
+        if (identifier == null || !SAFE_PG_IDENTIFIER.matcher(identifier).matches()) {
+            throw new IllegalArgumentException("Unsafe PostgreSQL identifier: " + identifier);
+        }
+        return "\"" + identifier + "\"";
     }
 
     private void ensureTenantRow(DatabaseConnectionDetails details, TenantConfig tenant) throws SQLException {
